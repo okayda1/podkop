@@ -83,6 +83,9 @@ msgstr "Проверки не выполнены"
 msgid "Checks passed"
 msgstr "Проверки пройдены"
 
+msgid "CIDR must be between 0 and 128"
+msgstr "CIDR должен быть между 0 и 128"
+
 msgid "CIDR must be between 0 and 32"
 msgstr "CIDR должен быть между 0 и 32"
 
@@ -272,15 +275,6 @@ msgstr "Глобальная проверка"
 msgid "HTTP error"
 msgstr "Ошибка HTTP"
 
-msgid "IPv6 Support"
-msgstr "Поддержка IPv6"
-
-msgid "IPv6 Support is disabled"
-msgstr "Поддержка IPv6 выключена"
-
-msgid "You have entered IPv6 addresses or subnets, but they will be ignored until IPv6 Support is enabled on the Settings tab."
-msgstr "Вы ввели IPv6-адреса или подсети, но они будут игнорироваться, пока на вкладке «Настройки» не включена поддержка IPv6."
-
 msgid "Interface Monitoring"
 msgstr "Мониторинг интерфейса"
 
@@ -295,6 +289,9 @@ msgstr "Неверный формат DNS-сервера. Примеры: 8.8.8.
 
 msgid "Invalid domain address"
 msgstr "Неверный домен"
+
+msgid "Invalid format. Use X::X or X::X/Y"
+msgstr "Неверный формат. Используйте X::X или X::X/Y"
 
 msgid "Invalid format. Use X.X.X.X or X.X.X.X/Y"
 msgstr "Неверный формат. Используйте X.X.X.X или X.X.X.X/Y"
@@ -421,6 +418,12 @@ msgstr "Неверный URL VLESS: ошибка разбора"
 
 msgid "IP address 0.0.0.0 is not allowed"
 msgstr "IP-адрес 0.0.0.0 не допускается"
+
+msgid "IPv6 Support"
+msgstr "Поддержка IPv6"
+
+msgid "IPv6 Support is disabled"
+msgstr "Поддержка IPv6 выключена"
 
 msgid "Issues detected"
 msgstr "Обнаружены проблемы"
@@ -811,3 +814,6 @@ msgstr "Секретный ключ YACD"
 
 msgid "You can select Output Network Interface, by default autodetect"
 msgstr "Вы можете выбрать выходной сетевой интерфейс, по умолчанию он определяется автоматически."
+
+msgid "You have entered IPv6 addresses or subnets, but they will be ignored until IPv6 Support is enabled on the Settings tab."
+msgstr "Вы ввели IPv6-адреса или подсети, но они будут игнорироваться, пока на вкладке «Настройки» не включена поддержка IPv6."

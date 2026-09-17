@@ -161,6 +161,13 @@
     ]
   },
   {
+    "call": "CIDR must be between 0 and 128",
+    "key": "CIDR must be between 0 and 128",
+    "places": [
+      "src/validators/validateSubnet.ts:21"
+    ]
+  },
+  {
     "call": "CIDR must be between 0 and 32",
     "key": "CIDR must be between 0 and 32",
     "places": [
@@ -498,10 +505,17 @@
     ]
   },
   {
-    "call": "Enter subnets in CIDR notation (e.g. 103.21.244.0/22) or single IP addresses",
-    "key": "Enter subnets in CIDR notation (e.g. 103.21.244.0/22) or single IP addresses",
+    "call": "Enter subnets in CIDR notation (e.g. 103.21.244.0/22 or 2606:4700::/32) or single IP addresses. IPv6 entries are applied only when IPv6 Support is enabled on the Settings tab",
+    "key": "Enter subnets in CIDR notation (e.g. 103.21.244.0/22 or 2606:4700::/32) or single IP addresses. IPv6 entries are applied only when IPv6 Support is enabled on the Settings tab",
     "places": [
-      "../luci-app-podkop/htdocs/luci-static/resources/view/podkop/section.js:480"
+      "../luci-app-podkop/htdocs/luci-static/resources/view/podkop/section.js:529"
+    ]
+  },
+  {
+    "call": "Enter subnets in CIDR notation or single IP addresses, separated by commas, spaces, or newlines. You can add comments using //. IPv6 entries are applied only when IPv6 Support is enabled on the Settings tab",
+    "key": "Enter subnets in CIDR notation or single IP addresses, separated by commas, spaces, or newlines. You can add comments using //. IPv6 entries are applied only when IPv6 Support is enabled on the Settings tab",
+    "places": [
+      "../luci-app-podkop/htdocs/luci-static/resources/view/podkop/section.js:558"
     ]
   },
   {
@@ -544,6 +558,13 @@
     "key": "Exclude NTP protocol traffic from the tunnel to prevent it from being routed through the proxy or VPN",
     "places": [
       "../luci-app-podkop/htdocs/luci-static/resources/view/podkop/settings.js:403"
+    ]
+  },
+  {
+    "call": "Failed to apply the list of IPs excluded from routing",
+    "key": "Failed to apply the list of IPs excluded from routing",
+    "places": [
+      "../luci-app-podkop/htdocs/luci-static/resources/view/podkop/settings.js:469"
     ]
   },
   {
@@ -635,6 +656,13 @@
     "places": [
       "src/validators/validateDomain.ts:18",
       "src/validators/validateDomain.ts:27"
+    ]
+  },
+  {
+    "call": "Invalid format. Use X::X or X::X/Y",
+    "key": "Invalid format. Use X::X or X::X/Y",
+    "places": [
+      "src/validators/validateSubnet.ts:13"
     ]
   },
   {
@@ -933,6 +961,20 @@
     ]
   },
   {
+    "call": "IPv6 Support",
+    "key": "IPv6 Support",
+    "places": [
+      "../luci-app-podkop/htdocs/luci-static/resources/view/podkop/settings.js:418"
+    ]
+  },
+  {
+    "call": "IPv6 Support is disabled",
+    "key": "IPv6 Support is disabled",
+    "places": [
+      "../luci-app-podkop/htdocs/luci-static/resources/view/podkop/section.js:28"
+    ]
+  },
+  {
     "call": "Issues detected",
     "key": "Issues detected",
     "places": [
@@ -1199,6 +1241,13 @@
     "key": "Restart podkop",
     "places": [
       "src/podkop/tabs/diagnostic/partials/renderAvailableActions.ts:49"
+    ]
+  },
+  {
+    "call": "Route IPv6 traffic through the tunnel: IPv6 destinations from the lists and FakeIP AAAA answers (fc00::/18) are proxied. Enable only if your network uses IPv6 and avoid assigning LAN ULA addresses inside fc00::/18",
+    "key": "Route IPv6 traffic through the tunnel: IPv6 destinations from the lists and FakeIP AAAA answers (fc00::/18) are proxied. Enable only if your network uses IPv6 and avoid assigning LAN ULA addresses inside fc00::/18",
+    "places": [
+      "../luci-app-podkop/htdocs/luci-static/resources/view/podkop/settings.js:419"
     ]
   },
   {
@@ -1498,13 +1547,6 @@
     ]
   },
   {
-    "call": "Failed to apply the list of IPs excluded from routing",
-    "key": "Failed to apply the list of IPs excluded from routing",
-    "places": [
-      "../luci-app-podkop/htdocs/luci-static/resources/view/podkop/settings.js:469"
-    ]
-  },
-  {
     "call": "Specify a local IP address to be excluded from routing. Applied without restarting the service",
     "key": "Specify a local IP address to be excluded from routing. Applied without restarting the service",
     "places": [
@@ -1512,10 +1554,10 @@
     ]
   },
   {
-    "call": "Specify local IP addresses or subnets whose traffic will always be routed through the configured route",
-    "key": "Specify local IP addresses or subnets whose traffic will always be routed through the configured route",
+    "call": "Specify local IP addresses or subnets whose traffic will always be routed through the configured route. IPv6 entries are applied only when IPv6 Support is enabled on the Settings tab",
+    "key": "Specify local IP addresses or subnets whose traffic will always be routed through the configured route. IPv6 entries are applied only when IPv6 Support is enabled on the Settings tab",
     "places": [
-      "../luci-app-podkop/htdocs/luci-static/resources/view/podkop/section.js:639"
+      "../luci-app-podkop/htdocs/luci-static/resources/view/podkop/section.js:693"
     ]
   },
   {
@@ -1879,6 +1921,13 @@
     "key": "You can select Output Network Interface, by default autodetect",
     "places": [
       "../luci-app-podkop/htdocs/luci-static/resources/view/podkop/settings.js:127"
+    ]
+  },
+  {
+    "call": "You have entered IPv6 addresses or subnets, but they will be ignored until IPv6 Support is enabled on the Settings tab.",
+    "key": "You have entered IPv6 addresses or subnets, but they will be ignored until IPv6 Support is enabled on the Settings tab.",
+    "places": [
+      "../luci-app-podkop/htdocs/luci-static/resources/view/podkop/section.js:30"
     ]
   }
 ]

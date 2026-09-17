@@ -556,9 +556,7 @@ function createSectionContent(section) {
     "user_subnets_text",
     _("User Subnets List"),
     _(
-      "Enter subnets in CIDR notation or single IP addresses, separated by commas, spaces, or newlines. " +
-        "You can add comments using //. " +
-        "IPv6 entries are applied only when IPv6 Support is enabled on the Settings tab",
+      "Enter subnets in CIDR notation or single IP addresses, separated by commas, spaces, or newlines. You can add comments using //. IPv6 entries are applied only when IPv6 Support is enabled on the Settings tab",
     ),
   );
   o.placeholder =
