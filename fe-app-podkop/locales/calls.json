@@ -1498,10 +1498,17 @@
     ]
   },
   {
-    "call": "Specify a local IP address to be excluded from routing",
-    "key": "Specify a local IP address to be excluded from routing",
+    "call": "Failed to apply the list of IPs excluded from routing",
+    "key": "Failed to apply the list of IPs excluded from routing",
     "places": [
-      "../luci-app-podkop/htdocs/luci-static/resources/view/podkop/settings.js:414"
+      "../luci-app-podkop/htdocs/luci-static/resources/view/podkop/settings.js:469"
+    ]
+  },
+  {
+    "call": "Specify a local IP address to be excluded from routing. Applied without restarting the service",
+    "key": "Specify a local IP address to be excluded from routing. Applied without restarting the service",
+    "places": [
+      "../luci-app-podkop/htdocs/luci-static/resources/view/podkop/settings.js:431"
     ]
   },
   {

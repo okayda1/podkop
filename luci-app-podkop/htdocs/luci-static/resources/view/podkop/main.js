@@ -684,6 +684,7 @@ var Podkop;
     AvailableMethods2["SHOW_SING_BOX_CONFIG"] = "show_sing_box_config";
     AvailableMethods2["CHECK_LOGS"] = "check_logs";
     AvailableMethods2["GET_SYSTEM_INFO"] = "get_system_info";
+    AvailableMethods2["EXCLUDE_IP_SET"] = "exclude_ip_set";
   })(AvailableMethods = Podkop2.AvailableMethods || (Podkop2.AvailableMethods = {}));
   let AvailableClashAPIMethods;
   ((AvailableClashAPIMethods2) => {
@@ -754,6 +755,10 @@ var PodkopShellMethods = {
     "/etc/init.d/podkop"
   ),
   globalCheck: async () => callBaseMethod(Podkop.AvailableMethods.GLOBAL_CHECK),
+  // Replaces the routing_excluded_ips list and pushes it into the sing-box
+  // rule set. podkop commits the UCI change itself, so nothing is staged in
+  // LuCI and "Save & Apply" has no reason to restart the service.
+  setRoutingExcludedIps: async (ips) => callBaseMethod(Podkop.AvailableMethods.EXCLUDE_IP_SET, ips),
   showSingBoxConfig: async () => callBaseMethod(Podkop.AvailableMethods.SHOW_SING_BOX_CONFIG),
   checkLogs: async () => callBaseMethod(Podkop.AvailableMethods.CHECK_LOGS),
   getSystemInfo: async () => callBaseMethod(

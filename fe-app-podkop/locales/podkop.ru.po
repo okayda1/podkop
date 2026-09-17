@@ -245,6 +245,9 @@ msgstr "Исключить NTP"
 msgid "Exclude NTP protocol traffic from the tunnel to prevent it from being routed through the proxy or VPN"
 msgstr "Исключите трафик протокола NTP из туннеля, чтобы предотвратить его маршрутизацию через прокси-сервер или VPN."
 
+msgid "Failed to apply the list of IPs excluded from routing"
+msgstr "Не удалось применить список IP-адресов, исключённых из маршрутизации"
+
 msgid "Failed to copy!"
 msgstr "Не удалось скопировать!"
 
@@ -644,8 +647,8 @@ msgstr "Версия Sing-box совместима (новее 1.12.4)"
 msgid "Source Network Interface"
 msgstr "Сетевой интерфейс источника"
 
-msgid "Specify a local IP address to be excluded from routing"
-msgstr "Укажите локальный IP-адрес, который следует исключить из маршрутизации."
+msgid "Specify a local IP address to be excluded from routing. Applied without restarting the service"
+msgstr "Укажите локальный IP-адрес, который следует исключить из маршрутизации. Применяется без перезапуска сервиса."
 
 msgid "Specify local IP addresses or subnets whose traffic will always be routed through the configured route"
 msgstr "Укажите локальные IP-адреса или подсети, трафик которых всегда будет направляться через настроенный маршрут."

@@ -76,6 +76,11 @@ export const PodkopShellMethods = {
     ),
   globalCheck: async () =>
     callBaseMethod<unknown>(Podkop.AvailableMethods.GLOBAL_CHECK),
+  // Replaces the routing_excluded_ips list and pushes it into the sing-box
+  // rule set. podkop commits the UCI change itself, so nothing is staged in
+  // LuCI and "Save & Apply" has no reason to restart the service.
+  setRoutingExcludedIps: async (ips: string[]) =>
+    callBaseMethod<string>(Podkop.AvailableMethods.EXCLUDE_IP_SET, ips),
   showSingBoxConfig: async () =>
     callBaseMethod<unknown>(Podkop.AvailableMethods.SHOW_SING_BOX_CONFIG),
   checkLogs: async () =>

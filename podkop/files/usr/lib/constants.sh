@@ -52,6 +52,12 @@ SB_DIRECT_OUTBOUND_TAG="direct-out"
 # Route
 SB_REJECT_RULE_TAG="reject-rule-tag"
 SB_EXCLUSION_RULE_TAG="exclusion-rule-tag"
+SB_ROUTING_EXCLUDED_IPS_RULE_TAG="routing-excluded-ips-rule-tag"
+SB_ROUTING_EXCLUDED_IPS_RULESET_TAG="routing-excluded-ips-ruleset"
+SB_ROUTING_EXCLUDED_IPS_RULESET_FILEPATH="$TMP_RULESET_FOLDER/$SB_ROUTING_EXCLUDED_IPS_RULESET_TAG.json"
+# Keeps the rule set non-empty while no address is excluded: 0.0.0.0 can never
+# be the source address of a routed packet, so the rule simply never matches
+SB_ROUTING_EXCLUDED_IPS_PLACEHOLDER="0.0.0.0/32"
 # Experimental
 SB_CLASH_API_CONTROLLER_PORT=9090
 

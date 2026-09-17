@@ -1,6 +1,7 @@
 "use strict";
 "require form";
 "require uci";
+"require ui";
 "require baseclass";
 "require tools.widgets as widgets";
 "require view.podkop.main as main";
@@ -426,7 +427,9 @@ function createSettingsContent(section) {
     form.DynamicList,
     "routing_excluded_ips",
     _("Routing Excluded IPs"),
-    _("Specify a local IP address to be excluded from routing"),
+    _(
+      "Specify a local IP address to be excluded from routing. Applied without restarting the service",
+    ),
   );
   o.placeholder = "IP";
   o.rmempty = true;
@@ -444,6 +447,31 @@ function createSettingsContent(section) {
 
     return validation.message;
   };
+  // The list is handed to podkop instead of being written through uci: podkop
+  // commits the change itself and reloads the sing-box rule set in place, so
+  // nothing is staged here and "Save & Apply" has no reason to restart the
+  // service. The whole list is sent every time, not a diff.
+  o.write = function (section_id, value) {
+    return applyRoutingExcludedIps(value);
+  };
+  o.remove = function () {
+    return applyRoutingExcludedIps([]);
+  };
+}
+
+async function applyRoutingExcludedIps(value) {
+  const ips = (Array.isArray(value) ? value : [value]).filter(Boolean);
+  const response = await main.PodkopShellMethods.setRoutingExcludedIps(ips);
+
+  if (!response.success) {
+    ui.addNotification(
+      null,
+      E("p", _("Failed to apply the list of IPs excluded from routing")),
+      "error",
+    );
+
+    throw new Error("exclude_ip_set failed");
+  }
 }
 
 const EntryPoint = {

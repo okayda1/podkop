@@ -339,6 +339,10 @@ msgstr ""
 msgid "Exclude NTP protocol traffic from the tunnel to prevent it from being routed through the proxy or VPN"
 msgstr ""
 
+#: ../luci-app-podkop/htdocs/luci-static/resources/view/podkop/settings.js:469
+msgid "Failed to apply the list of IPs excluded from routing"
+msgstr ""
+
 #: src/helpers/copyToClipboard.ts:12
 msgid "Failed to copy!"
 msgstr ""
@@ -907,8 +911,8 @@ msgstr ""
 msgid "Source Network Interface"
 msgstr ""
 
-#: ../luci-app-podkop/htdocs/luci-static/resources/view/podkop/settings.js:414
-msgid "Specify a local IP address to be excluded from routing"
+#: ../luci-app-podkop/htdocs/luci-static/resources/view/podkop/settings.js:431
+msgid "Specify a local IP address to be excluded from routing. Applied without restarting the service"
 msgstr ""
 
 #: ../luci-app-podkop/htdocs/luci-static/resources/view/podkop/section.js:639

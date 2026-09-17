@@ -826,14 +826,6 @@ configure_outbound_handler() {
         log "Connection type 'exclusion' detected for the $section section – no outbound will be created (handled via route rules)"
         ;;
     *)
-    local routing_excluded_ips
-    config_get routing_excluded_ips "settings" "routing_excluded_ips"
-    if [ -n "$routing_excluded_ips" ]; then
-        rule_tag="$(gen_id)"
-        config=$(sing_box_cm_add_route_rule "$config" "$rule_tag" "$SB_TPROXY_INBOUND_TAG" "$SB_DIRECT_OUTBOUND_TAG")
-        config_list_foreach "settings" "routing_excluded_ips" exclude_source_ip_from_routing_handler "$rule_tag"
-    fi
-
         log "Unknown connection type '$connection_type' for the $section section. Aborted." "fatal"
         exit 1
         ;;
@@ -904,12 +896,13 @@ sing_box_configure_route() {
         config=$(sing_box_cf_add_single_key_reject_rule "$config" "$SB_TPROXY_INBOUND_TAG" "protocol" "quic")
     fi
 
-    local rule_tag="$2"
     local first_outbound_section
     first_outbound_section="$(get_first_outbound_section)"
     first_outbound_tag="$(get_outbound_tag_by_section "$first_outbound_section")"
     config=$(sing_box_cf_proxy_domain "$config" "$SB_TPROXY_INBOUND_TAG" "$CHECK_PROXY_IP_DOMAIN" "$first_outbound_tag")
     config=$(sing_box_cf_override_domain_port "$config" "$FAKEIP_TEST_DOMAIN" 8443)
+
+    configure_routing_excluded_ips
 
     configure_common_reject_route_rule
     configure_common_direct_route_rule
@@ -982,10 +975,72 @@ include_source_ip_in_routing_handler() {
     config=$(sing_box_cm_patch_route_rule "$config" "$rule_tag" "source_ip_cidr" "$source_ip")
 }
 
-exclude_source_ip_from_routing_handler() {
+# Sends everything coming from an excluded source IP straight to the direct
+# outbound. The rule has to be added before the reject, exclusion and section
+# rules: sing-box stops at the first matching route rule, so placed after them
+# a block section would still swallow the traffic of an excluded device.
+#
+# The addresses live in a local source rule set instead of being inlined into
+# the rule, which makes the list changeable at runtime - sing-box reloads a
+# local rule set whenever its file changes (since 1.10.0).
+configure_routing_excluded_ips() {
+    write_routing_excluded_ips_ruleset
+
+    config=$(sing_box_cm_add_local_ruleset "$config" "$SB_ROUTING_EXCLUDED_IPS_RULESET_TAG" "source" \
+        "$SB_ROUTING_EXCLUDED_IPS_RULESET_FILEPATH")
+    config=$(sing_box_cm_add_route_rule "$config" "$SB_ROUTING_EXCLUDED_IPS_RULE_TAG" "$SB_TPROXY_INBOUND_TAG" \
+        "$SB_DIRECT_OUTBOUND_TAG")
+    config=$(sing_box_cm_patch_route_rule "$config" "$SB_ROUTING_EXCLUDED_IPS_RULE_TAG" "rule_set" \
+        "$SB_ROUTING_EXCLUDED_IPS_RULESET_TAG")
+}
+
+# Appends a valid address to the comma separated $routing_excluded_ips global
+collect_routing_excluded_ip_handler() {
     local source_ip="$1"
 
-    config=$(sing_box_cm_patch_route_rule "$config" "$rule_tag" "source_ip_cidr" "$source_ip")
+    if is_ipv6_ip_or_ipv6_cidr "$source_ip"; then
+        if ! ipv6_enabled; then
+            log "Skipping excluded IPv6 address $source_ip: IPv6 is disabled" "warn"
+            return 0
+        fi
+    elif ! is_ipv4_ip_or_ipv4_cidr "$source_ip"; then
+        log "Skipping excluded address '$source_ip': not an IP address or CIDR" "warn"
+        return 0
+    fi
+
+    if [ -z "$routing_excluded_ips" ]; then
+        routing_excluded_ips="$source_ip"
+    else
+        routing_excluded_ips="$routing_excluded_ips,$source_ip"
+    fi
+}
+
+# Rebuilds the excluded IPs rule set file from the current UCI state. The file
+# is written through a temporary name in the same folder and moved into place:
+# sing-box watches the folder, and an in-place rewrite would let it read a
+# half-written file.
+write_routing_excluded_ips_ruleset() {
+    local filepath="$SB_ROUTING_EXCLUDED_IPS_RULESET_FILEPATH"
+
+    routing_excluded_ips=""
+    config_list_foreach "settings" "routing_excluded_ips" collect_routing_excluded_ip_handler
+
+    local json_array
+    if [ -z "$routing_excluded_ips" ]; then
+        json_array="$(comma_string_to_json_array "$SB_ROUTING_EXCLUDED_IPS_PLACEHOLDER")"
+    else
+        json_array="$(comma_string_to_json_array "$routing_excluded_ips")"
+    fi
+
+    mkdir -p "$(dirname "$filepath")"
+    if ! jq -n --argjson ips "$json_array" '{version: 3, rules: [{source_ip_cidr: $ips}]}' > "$filepath.new"; then
+        log "Failed to build the routing excluded IPs rule set" "error"
+        rm -f "$filepath.new"
+        return 1
+    fi
+
+    mv "$filepath.new" "$filepath"
+    log "Routing excluded IPs: ${routing_excluded_ips:-none}" "debug"
 }
 
 configure_routing_for_section_lists() {
@@ -2820,6 +2875,88 @@ global_check() {
     fi
 }
 
+validate_routing_excluded_ip() {
+    local source_ip="$1"
+
+    if [ -z "$source_ip" ]; then
+        echo "Error: no IP address given" >&2
+        return 1
+    fi
+
+    if ! is_ipv4_ip_or_ipv4_cidr "$source_ip" && ! is_ipv6_ip_or_ipv6_cidr "$source_ip"; then
+        echo "Error: '$source_ip' is not an IP address or CIDR" >&2
+        return 1
+    fi
+}
+
+# Pushes the list loaded at start-up into the rule set file. sing-box reloads
+# the file on its own, so neither podkop nor sing-box has to be restarted.
+apply_routing_excluded_ips() {
+    write_routing_excluded_ips_ruleset || return 1
+
+    if pgrep -f "sing-box" > /dev/null; then
+        echo "Applied: ${routing_excluded_ips:-<empty>}"
+    else
+        echo "Saved: ${routing_excluded_ips:-<empty>} (sing-box is not running, it will be picked up on start)"
+    fi
+}
+
+# Re-runs podkop instead of calling apply_routing_excluded_ips directly: a
+# second config_load in the same shell would leave the CONFIG_*_ITEM variables
+# of the previous load behind once the last address is removed.
+reexec_apply_routing_excluded_ips() {
+    "$0" exclude_ip_apply
+}
+
+exclude_ip_add() {
+    local source_ip="$1"
+
+    validate_routing_excluded_ip "$source_ip" || return 1
+
+    # del_list first, so repeating the command does not duplicate the entry
+    uci -q del_list podkop.settings.routing_excluded_ips="$source_ip"
+    uci add_list podkop.settings.routing_excluded_ips="$source_ip"
+    uci commit podkop
+
+    reexec_apply_routing_excluded_ips
+}
+
+exclude_ip_del() {
+    local source_ip="$1"
+
+    validate_routing_excluded_ip "$source_ip" || return 1
+
+    if ! uci -q del_list podkop.settings.routing_excluded_ips="$source_ip"; then
+        echo "Error: '$source_ip' is not in the list" >&2
+        return 1
+    fi
+    uci commit podkop
+
+    reexec_apply_routing_excluded_ips
+}
+
+# Replaces the whole list at once, which is what the LuCI form needs: it hands
+# over the full field value rather than a diff. No argument clears the list.
+exclude_ip_set() {
+    local source_ip
+
+    for source_ip in "$@"; do
+        validate_routing_excluded_ip "$source_ip" || return 1
+    done
+
+    uci -q delete podkop.settings.routing_excluded_ips
+    for source_ip in "$@"; do
+        uci add_list podkop.settings.routing_excluded_ips="$source_ip"
+    done
+    uci commit podkop
+
+    reexec_apply_routing_excluded_ips
+}
+
+exclude_ip_list() {
+    uci -q get podkop.settings.routing_excluded_ips | tr ' ' '\n'
+}
+
 show_help() {
     cat << EOF
 Usage: $0 COMMAND
@@ -2849,6 +2986,11 @@ Available commands:
     get_system_info         Get system information in JSON format
     check_dns_available     Check DNS server availability
     global_check            Run global system check
+    exclude_ip_add IP       Exclude a local IP from routing, applied without restart
+    exclude_ip_del IP       Stop excluding a local IP, applied without restart
+    exclude_ip_set [IP...]  Replace the whole excluded IP list, applied without restart
+    exclude_ip_list         List the IPs excluded from routing
+    exclude_ip_apply        Re-apply the excluded IP list without restart
 EOF
 }
 
@@ -2924,6 +3066,22 @@ check_dns_available)
     ;;
 global_check)
     global_check "${2:-}"
+    ;;
+exclude_ip_add)
+    exclude_ip_add "${2:-}"
+    ;;
+exclude_ip_del)
+    exclude_ip_del "${2:-}"
+    ;;
+exclude_ip_set)
+    shift
+    exclude_ip_set "$@"
+    ;;
+exclude_ip_list)
+    exclude_ip_list
+    ;;
+exclude_ip_apply)
+    apply_routing_excluded_ips
     ;;
 *)
     show_help

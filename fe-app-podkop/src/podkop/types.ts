@@ -47,6 +47,7 @@ export namespace Podkop {
   // get_sing_box_status     Get sing-box service status
   // check_dns_available     Check DNS server availability
   // global_check            Run global system check
+  // exclude_ip_set [IP...]  Replace the whole excluded IP list, applied without restart
 
   export enum AvailableMethods {
     CHECK_DNS_AVAILABLE = 'check_dns_available',
@@ -65,6 +66,7 @@ export namespace Podkop {
     SHOW_SING_BOX_CONFIG = 'show_sing_box_config',
     CHECK_LOGS = 'check_logs',
     GET_SYSTEM_INFO = 'get_system_info',
+    EXCLUDE_IP_SET = 'exclude_ip_set',
   }
 
   export enum AvailableClashAPIMethods {
