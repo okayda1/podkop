@@ -16,6 +16,32 @@ is_ipv4_ip_or_ipv4_cidr() {
     is_ipv4 "$1" || is_ipv4_cidr "$1"
 }
 
+# Check if string is valid IPv6
+is_ipv6() {
+    local ip="$1"
+    local regex='^(([0-9A-Fa-f]{1,4}:){7}[0-9A-Fa-f]{1,4}|([0-9A-Fa-f]{1,4}:){1,7}:|([0-9A-Fa-f]{1,4}:){1,6}:[0-9A-Fa-f]{1,4}|([0-9A-Fa-f]{1,4}:){1,5}(:[0-9A-Fa-f]{1,4}){1,2}|([0-9A-Fa-f]{1,4}:){1,4}(:[0-9A-Fa-f]{1,4}){1,3}|([0-9A-Fa-f]{1,4}:){1,3}(:[0-9A-Fa-f]{1,4}){1,4}|([0-9A-Fa-f]{1,4}:){1,2}(:[0-9A-Fa-f]{1,4}){1,5}|[0-9A-Fa-f]{1,4}:((:[0-9A-Fa-f]{1,4}){1,6})|:((:[0-9A-Fa-f]{1,4}){1,7}|:))$'
+    [[ "$ip" =~ $regex ]]
+}
+
+# Check if string is valid IPv6 with CIDR mask
+is_ipv6_cidr() {
+    local ip="$1"
+
+    # busybox ash expands globs inside [[ ]], so the slash check uses case
+    case "$ip" in
+    */*) ;;
+    *) return 1 ;;
+    esac
+
+    local mask="${ip##*/}"
+    local mask_regex='^(12[0-8]|1[01][0-9]|[1-9]?[0-9])$'
+    [[ "$mask" =~ $mask_regex ]] && is_ipv6 "${ip%/*}"
+}
+
+is_ipv6_ip_or_ipv6_cidr() {
+    is_ipv6 "$1" || is_ipv6_cidr "$1"
+}
+
 is_domain() {
     local str="$1"
     local regex='^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$'
@@ -137,7 +163,7 @@ url_get_userinfo() {
     echo "$url" | sed -n -e 's#^[^:/?]*://##' -e '/@/!d' -e 's/@.*//p'
 }
 
-# Extracts the host part from a URL
+# Extracts the host part from a URL, IPv6 literals are returned without brackets
 url_get_host() {
     local url="$1"
 
@@ -145,7 +171,20 @@ url_get_host() {
     url="${url#*@}"
     url="${url%%[/?#]*}"
 
-    echo "${url%%:*}"
+    case "$url" in
+    \[*\]*)
+        url="${url#\[}"
+        echo "${url%%\]*}"
+        ;;
+    *)
+        # A bare IPv6 literal without brackets has no port part
+        if is_ipv6 "$url"; then
+            echo "$url"
+        else
+            echo "${url%%:*}"
+        fi
+        ;;
+    esac
 }
 
 # Extracts the port number from a URL
@@ -156,7 +195,21 @@ url_get_port() {
     url="${url#*@}"
     url="${url%%[/?#]*}"
 
-    [[ "$url" == *:* ]] && echo "${url#*:}" || echo ""
+    case "$url" in
+    \[*\]:*)
+        echo "${url##*\]:}"
+        ;;
+    \[*\])
+        echo ""
+        ;;
+    *)
+        if is_ipv6 "$url"; then
+            echo ""
+        else
+            [[ "$url" == *:* ]] && echo "${url#*:}" || echo ""
+        fi
+        ;;
+    esac
 }
 
 # Extracts the path from a URL (without query or fragment; returns "/" if empty)
@@ -290,7 +343,7 @@ convert_crlf_to_lf() {
 # or IPv4 addresses/subnets, and returns a comma-separated string of valid items.
 # Arguments:
 #   $1 - Input string (space-separated list of items)
-#   $2 - Type of validation ("domains" or "subnets")
+#   $2 - Type of validation ("domains", "subnets" or "subnets6")
 # Outputs:
 #   Comma-separated string of valid domains or subnets
 #######################################
@@ -312,7 +365,7 @@ parse_domain_or_subnet_string_to_commas_string() {
 # and returns a single comma-separated string of valid items.
 # Arguments:
 #   $1 - Path to the input file
-#   $2 - Type of validation ("domains" or "subnets")
+#   $2 - Type of validation ("domains", "subnets" or "subnets6")
 # Outputs:
 #   Comma-separated string of valid domains or subnets
 #######################################
@@ -336,6 +389,12 @@ parse_domain_or_subnet_file_to_comma_string() {
         subnets)
             if ! is_ipv4 "$line" && ! is_ipv4_cidr "$line"; then
                 log "'$line' is not IPv4 or IPv4 CIDR" "debug"
+                continue
+            fi
+            ;;
+        subnets6)
+            if ! is_ipv6 "$line" && ! is_ipv6_cidr "$line"; then
+                log "'$line' is not IPv6 or IPv6 CIDR" "debug"
                 continue
             fi
             ;;

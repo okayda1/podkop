@@ -172,6 +172,16 @@ stop_main() {
         ip route flush table "$RT_TABLE_NAME"
     fi
 
+    # IPv6 teardown is unconditional: the ipv6 option may have been
+    # turned off after the rules were created
+    if ip -6 rule list | grep -q "podkop"; then
+        ip -6 rule del fwmark "$NFT_FAKEIP_MARK"/"$NFT_FAKEIP_MARK" table "$RT_TABLE_NAME" priority 105
+    fi
+
+    if ip -6 route list table "$RT_TABLE_NAME" > /dev/null 2>&1; then
+        ip -6 route flush table "$RT_TABLE_NAME"
+    fi
+
     log "Stop sing-box"
     /etc/init.d/sing-box stop
 }
@@ -266,6 +276,25 @@ route_table_rule_mark() {
     else
         log "Marking rule exist" "debug"
     fi
+
+    if ipv6_enabled; then
+        # busybox "ip -6 route list" does not display local routes,
+        # so idempotency relies on the kernel EEXIST answer instead of grep
+        if ip -6 route add local ::/0 dev lo table "$RT_TABLE_NAME" 2> /dev/null; then
+            log "Added IPv6 route for tproxy" "debug"
+        else
+            log "IPv6 route for tproxy exists" "debug"
+        fi
+
+        # busybox prints the fwmark without leading zeros (0x100000),
+        # so match the rule by the lookup target instead of the exact mark
+        if ! ip -6 rule list | grep -q "fwmark.*lookup $RT_TABLE_NAME"; then
+            log "Create IPv6 marking rule" "debug"
+            ip -6 rule add fwmark "$NFT_FAKEIP_MARK"/"$NFT_FAKEIP_MARK" table "$RT_TABLE_NAME" priority 105
+        else
+            log "IPv6 marking rule exist" "debug"
+        fi
+    fi
 }
 
 nft_init_interfaces_set() {
@@ -327,6 +356,40 @@ create_nft_rules() {
     nft add rule inet "$NFT_TABLE_NAME" mangle_output ip daddr "@$NFT_COMMON_SET_NAME" meta l4proto udp meta mark set "$NFT_FAKEIP_MARK" counter
     nft add rule inet "$NFT_TABLE_NAME" mangle_output ip daddr "$SB_FAKEIP_INET4_RANGE" meta l4proto tcp meta mark set "$NFT_FAKEIP_MARK" counter
     nft add rule inet "$NFT_TABLE_NAME" mangle_output ip daddr "$SB_FAKEIP_INET4_RANGE" meta l4proto udp meta mark set "$NFT_FAKEIP_MARK" counter
+
+    if ipv6_enabled; then
+        log "Create localv6 set"
+        nft_create_ipv6_set "$NFT_TABLE_NAME" "$NFT_LOCALV6_SET_NAME"
+        # ULA fc00::/7 is added without the FakeIP range fc00::/18 carved out
+        # of it, mirroring how localv4 omits 198.18.0.0/15
+        nft add element inet "$NFT_TABLE_NAME" localv6 '{
+            ::/128,
+            ::1/128,
+            ::ffff:0:0/96,
+            2001:db8::/32,
+            fc00:4000::-fdff:ffff:ffff:ffff:ffff:ffff:ffff:ffff,
+            fe80::/10,
+            ff00::/8
+        }'
+
+        log "Create common v6 set"
+        nft_create_ipv6_set "$NFT_TABLE_NAME" "$NFT_COMMON_SET6_NAME"
+
+        log "Create nft IPv6 rules"
+        nft add rule inet "$NFT_TABLE_NAME" mangle iifname "@$NFT_INTERFACE_SET_NAME" ip6 daddr "@$NFT_COMMON_SET6_NAME" meta l4proto tcp meta mark set "$NFT_FAKEIP_MARK" counter
+        nft add rule inet "$NFT_TABLE_NAME" mangle iifname "@$NFT_INTERFACE_SET_NAME" ip6 daddr "@$NFT_COMMON_SET6_NAME" meta l4proto udp meta mark set "$NFT_FAKEIP_MARK" counter
+        nft add rule inet "$NFT_TABLE_NAME" mangle iifname "@$NFT_INTERFACE_SET_NAME" ip6 daddr "$SB_FAKEIP_INET6_RANGE" meta l4proto tcp meta mark set "$NFT_FAKEIP_MARK" counter
+        nft add rule inet "$NFT_TABLE_NAME" mangle iifname "@$NFT_INTERFACE_SET_NAME" ip6 daddr "$SB_FAKEIP_INET6_RANGE" meta l4proto udp meta mark set "$NFT_FAKEIP_MARK" counter
+
+        nft add rule inet "$NFT_TABLE_NAME" proxy meta mark \& "$NFT_FAKEIP_MARK" == "$NFT_FAKEIP_MARK" meta l4proto tcp tproxy ip6 to "[::1]:$SB_TPROXY_INBOUND_PORT" counter
+        nft add rule inet "$NFT_TABLE_NAME" proxy meta mark \& "$NFT_FAKEIP_MARK" == "$NFT_FAKEIP_MARK" meta l4proto udp tproxy ip6 to "[::1]:$SB_TPROXY_INBOUND_PORT" counter
+
+        nft add rule inet "$NFT_TABLE_NAME" mangle_output ip6 daddr "@$NFT_LOCALV6_SET_NAME" return
+        nft add rule inet "$NFT_TABLE_NAME" mangle_output ip6 daddr "@$NFT_COMMON_SET6_NAME" meta l4proto tcp meta mark set "$NFT_FAKEIP_MARK" counter
+        nft add rule inet "$NFT_TABLE_NAME" mangle_output ip6 daddr "@$NFT_COMMON_SET6_NAME" meta l4proto udp meta mark set "$NFT_FAKEIP_MARK" counter
+        nft add rule inet "$NFT_TABLE_NAME" mangle_output ip6 daddr "$SB_FAKEIP_INET6_RANGE" meta l4proto tcp meta mark set "$NFT_FAKEIP_MARK" counter
+        nft add rule inet "$NFT_TABLE_NAME" mangle_output ip6 daddr "$SB_FAKEIP_INET6_RANGE" meta l4proto udp meta mark set "$NFT_FAKEIP_MARK" counter
+    fi
 
     local exclude_ntp
     config_get_bool exclude_ntp "settings" "exclude_ntp" "0"
@@ -602,9 +665,16 @@ sing_box_configure_log() {
 sing_box_configure_inbounds() {
     log "Configure the inbounds section of a sing-box JSON configuration"
 
+    # With IPv6 enabled the tproxy inbound listens dual-stack on "::",
+    # which still accepts the IPv4 tproxy traffic to 127.0.0.1
+    local tproxy_listen_address="$SB_TPROXY_INBOUND_ADDRESS"
+    if ipv6_enabled; then
+        tproxy_listen_address="$SB_TPROXY_INBOUND_DUAL_ADDRESS"
+    fi
+
     config=$(
         sing_box_cm_add_tproxy_inbound \
-            "$config" "$SB_TPROXY_INBOUND_TAG" "$SB_TPROXY_INBOUND_ADDRESS" "$SB_TPROXY_INBOUND_PORT" true true
+            "$config" "$SB_TPROXY_INBOUND_TAG" "$tproxy_listen_address" "$SB_TPROXY_INBOUND_PORT" true true
     )
     config=$(
         sing_box_cm_add_direct_inbound "$config" "$SB_DNS_INBOUND_TAG" "$SB_DNS_INBOUND_ADDRESS" "$SB_DNS_INBOUND_PORT"
@@ -739,7 +809,7 @@ configure_outbound_handler() {
 
         if [ "$domain_resolver_enabled" -eq 1 ]; then
             domain_resolver_dns_server_address="$(url_get_host "$dns_server")"
-            if ! is_ipv4 "$domain_resolver_dns_server_address"; then
+            if ! is_ipv4 "$domain_resolver_dns_server_address" && ! is_ipv6 "$domain_resolver_dns_server_address"; then
                 dns_domain_resolver=$SB_BOOTSTRAP_SERVER_TAG
             fi
             domain_resolver_tag="$(get_domain_resolver_tag "$section")"
@@ -756,6 +826,14 @@ configure_outbound_handler() {
         log "Connection type 'exclusion' detected for the $section section – no outbound will be created (handled via route rules)"
         ;;
     *)
+    local routing_excluded_ips
+    config_get routing_excluded_ips "settings" "routing_excluded_ips"
+    if [ -n "$routing_excluded_ips" ]; then
+        rule_tag="$(gen_id)"
+        config=$(sing_box_cm_add_route_rule "$config" "$rule_tag" "$SB_TPROXY_INBOUND_TAG" "$SB_DIRECT_OUTBOUND_TAG")
+        config_list_foreach "settings" "routing_excluded_ips" exclude_source_ip_from_routing_handler "$rule_tag"
+    fi
+
         log "Unknown connection type '$connection_type' for the $section section. Aborted." "fatal"
         exit 1
         ;;
@@ -764,7 +842,15 @@ configure_outbound_handler() {
 
 sing_box_configure_dns() {
     log "Configure the DNS section of a sing-box JSON configuration"
-    config=$(sing_box_cm_configure_dns "$config" "$SB_DNS_SERVER_TAG" "ipv4_only" true)
+
+    local dns_strategy="ipv4_only"
+    local fakeip_inet6_range=""
+    if ipv6_enabled; then
+        dns_strategy="prefer_ipv4"
+        fakeip_inet6_range="$SB_FAKEIP_INET6_RANGE"
+    fi
+
+    config=$(sing_box_cm_configure_dns "$config" "$SB_DNS_SERVER_TAG" "$dns_strategy" true)
 
     log "Adding DNS Servers" "debug"
     local dns_type dns_server bootstrap_dns_server dns_domain_resolver dns_server_address
@@ -773,13 +859,14 @@ sing_box_configure_dns() {
     config_get bootstrap_dns_server "settings" "bootstrap_dns_server" "77.88.8.8"
 
     dns_server_address="$(url_get_host "$dns_server")"
-    if ! is_ipv4 "$dns_server_address"; then
+    if ! is_ipv4 "$dns_server_address" && ! is_ipv6 "$dns_server_address"; then
         dns_domain_resolver=$SB_BOOTSTRAP_SERVER_TAG
     fi
 
     config=$(sing_box_cm_add_udp_dns_server "$config" "$SB_BOOTSTRAP_SERVER_TAG" "$bootstrap_dns_server" 53)
     config=$(sing_box_cf_add_dns_server "$config" "$dns_type" "$SB_DNS_SERVER_TAG" "$dns_server" "$dns_domain_resolver")
-    config=$(sing_box_cm_add_fakeip_dns_server "$config" "$SB_FAKEIP_DNS_SERVER_TAG" "$SB_FAKEIP_INET4_RANGE")
+    config=$(sing_box_cm_add_fakeip_dns_server "$config" "$SB_FAKEIP_DNS_SERVER_TAG" "$SB_FAKEIP_INET4_RANGE" \
+        "$fakeip_inet6_range")
 
     log "Adding DNS Rules"
     local rewrite_ttl service_domains
@@ -817,6 +904,7 @@ sing_box_configure_route() {
         config=$(sing_box_cf_add_single_key_reject_rule "$config" "$SB_TPROXY_INBOUND_TAG" "protocol" "quic")
     fi
 
+    local rule_tag="$2"
     local first_outbound_section
     first_outbound_section="$(get_first_outbound_section)"
     first_outbound_tag="$(get_outbound_tag_by_section "$first_outbound_section")"
@@ -825,14 +913,6 @@ sing_box_configure_route() {
 
     configure_common_reject_route_rule
     configure_common_direct_route_rule
-
-    local routing_excluded_ips
-    config_get routing_excluded_ips "settings" "routing_excluded_ips"
-    if [ -n "$routing_excluded_ips" ]; then
-        rule_tag="$(gen_id)"
-        config=$(sing_box_cm_add_route_rule "$config" "$rule_tag" "$SB_TPROXY_INBOUND_TAG" "$SB_DIRECT_OUTBOUND_TAG")
-        config_list_foreach "settings" "routing_excluded_ips" exclude_source_ip_from_routing_handler "$rule_tag"
-    fi
 
     config_foreach include_source_ips_in_routing_handler "section"
 
@@ -904,7 +984,6 @@ include_source_ip_in_routing_handler() {
 
 exclude_source_ip_from_routing_handler() {
     local source_ip="$1"
-    local rule_tag="$2"
 
     config=$(sing_box_cm_patch_route_rule "$config" "$rule_tag" "source_ip_cidr" "$source_ip")
 }
@@ -1061,17 +1140,32 @@ configure_user_subnet_list() {
 
     prepare_source_ruleset "$section" "user" "subnets" "$route_rule_tag"
 
-    local user_subnet_list_type items json_array
+    local user_subnet_list_type items items4 items6 json_array
     config_get user_subnet_list_type "$section" "user_subnet_list_type"
     case "$user_subnet_list_type" in
     dynamic) config_get items "$section" "user_subnets" ;;
     text) config_get items "$section" "user_subnets_text" ;;
     esac
 
-    items="$(parse_domain_or_subnet_string_to_commas_string "$items" "subnets")"
+    items4="$(parse_domain_or_subnet_string_to_commas_string "$items" "subnets")"
+    items6=""
+    if ipv6_enabled; then
+        items6="$(parse_domain_or_subnet_string_to_commas_string "$items" "subnets6")"
+    fi
+
+    items="$items4"
+    if [ -n "$items6" ]; then
+        [ -n "$items" ] && items="$items,$items6" || items="$items6"
+    fi
+
     json_array="$(comma_string_to_json_array "$items")"
     patch_source_ruleset_rules "$ruleset_filepath" "ip_cidr" "$json_array"
-    nft_add_set_elements "$NFT_TABLE_NAME" "$NFT_COMMON_SET_NAME" "$items"
+    if [ -n "$items4" ]; then
+        nft_add_set_elements "$NFT_TABLE_NAME" "$NFT_COMMON_SET_NAME" "$items4"
+    fi
+    if [ -n "$items6" ]; then
+        nft_add_set_elements "$NFT_TABLE_NAME" "$NFT_COMMON_SET6_NAME" "$items6"
+    fi
 }
 
 configure_local_domain_lists() {
@@ -1114,7 +1208,7 @@ import_local_subnets_list_handler() {
     fi
 
     import_plain_subnet_list_to_local_source_ruleset_chunked "$local_subnet_list_filepath" "$ruleset_filepath"
-    nft_add_set_elements_from_file_chunked "$local_subnet_list_filepath" "$NFT_TABLE_NAME" "$NFT_COMMON_SET_NAME"
+    nft_import_subnets_file_to_common_sets "$local_subnet_list_filepath"
 }
 
 configure_remote_domain_or_subnet_list_handler() {
@@ -1288,42 +1382,65 @@ import_community_subnet_lists() {
 import_community_service_subnet_list_handler() {
     local service="$1"
 
+    local URL URL6
     case "$service" in
     "twitter")
         URL=$SUBNETS_TWITTER
+        URL6=$SUBNETS6_TWITTER
         ;;
     "meta")
         URL=$SUBNETS_META
+        URL6=$SUBNETS6_META
         ;;
     "telegram")
         URL=$SUBNETS_TELERAM
+        URL6=$SUBNETS6_TELERAM
         ;;
     "cloudflare")
         URL=$SUBNETS_CLOUDFLARE
+        URL6=$SUBNETS6_CLOUDFLARE
         ;;
     "hetzner")
         URL=$SUBNETS_HETZNER
+        URL6=$SUBNETS6_HETZNER
         ;;
     "ovh")
         URL=$SUBNETS_OVH
+        URL6=$SUBNETS6_OVH
         ;;
     "digitalocean")
         URL=$SUBNETS_DIGITALOCEAN
+        URL6=$SUBNETS6_DIGITALOCEAN
         ;;
     "cloudfront")
         URL=$SUBNETS_CLOUDFRONT
+        URL6=$SUBNETS6_CLOUDFRONT
         ;;
     "discord")
         URL=$SUBNETS_DISCORD
+        URL6=$SUBNETS6_DISCORD
         nft_create_ipv4_set "$NFT_TABLE_NAME" "$NFT_DISCORD_SET_NAME"
         nft add rule inet "$NFT_TABLE_NAME" mangle iifname "@$NFT_INTERFACE_SET_NAME" ip daddr \
             "@$NFT_DISCORD_SET_NAME" udp dport '{ 19000-20000, 50000-65535 }' meta mark set "$NFT_FAKEIP_MARK" counter
+        if ipv6_enabled; then
+            nft_create_ipv6_set "$NFT_TABLE_NAME" "$NFT_DISCORD_SET6_NAME"
+            nft add rule inet "$NFT_TABLE_NAME" mangle iifname "@$NFT_INTERFACE_SET_NAME" ip6 daddr \
+                "@$NFT_DISCORD_SET6_NAME" udp dport '{ 19000-20000, 50000-65535 }' meta mark set "$NFT_FAKEIP_MARK" counter
+        fi
         ;;
     "roblox")
         URL=$SUBNETS_ROBLOX
+        # upstream has no IPv6 subnet list for roblox
         ;;
     *) return 0 ;;
     esac
+
+    local target_set="$NFT_COMMON_SET_NAME"
+    local target_set6="$NFT_COMMON_SET6_NAME"
+    if [ "$service" = "discord" ]; then
+        target_set="$NFT_DISCORD_SET_NAME"
+        target_set6="$NFT_DISCORD_SET6_NAME"
+    fi
 
     local tmpfile http_proxy_address
     tmpfile=$(mktemp)
@@ -1336,13 +1453,24 @@ import_community_service_subnet_list_handler() {
         return 1
     fi
 
-    if [ "$service" = "discord" ]; then
-        nft_add_set_elements_from_file_chunked "$tmpfile" "$NFT_TABLE_NAME" "$NFT_DISCORD_SET_NAME"
-    else
-        nft_add_set_elements_from_file_chunked "$tmpfile" "$NFT_TABLE_NAME" "$NFT_COMMON_SET_NAME"
-    fi
+    nft_add_set_elements_from_file_chunked "$tmpfile" "$NFT_TABLE_NAME" "$target_set"
 
     rm -f "$tmpfile"
+
+    if ipv6_enabled && [ -n "$URL6" ]; then
+        local tmpfile6
+        tmpfile6=$(mktemp)
+
+        download_to_file "$URL6" "$tmpfile6" "$http_proxy_address"
+
+        if [ $? -ne 0 ] || [ ! -s "$tmpfile6" ]; then
+            log "Download $service IPv6 list failed" "error"
+        else
+            nft_add_set_elements_from_file_chunked "$tmpfile6" "$NFT_TABLE_NAME" "$target_set" 5000 "$target_set6"
+        fi
+
+        rm -f "$tmpfile6"
+    fi
 }
 
 import_domains_from_remote_domain_lists() {
@@ -1448,7 +1576,7 @@ import_subnets_from_remote_json_file() {
     fi
 
     extract_ip_cidr_from_json_ruleset_to_file "$json_tmpfile" "$subnets_tmpfile"
-    nft_add_set_elements_from_file_chunked "$subnets_tmpfile" "$NFT_TABLE_NAME" "$NFT_COMMON_SET_NAME"
+    nft_import_subnets_file_to_common_sets "$subnets_tmpfile"
     rm -f "$json_tmpfile" "$subnets_tmpfile"
 }
 
@@ -1474,7 +1602,7 @@ import_subnets_from_remote_srs_file() {
     fi
 
     extract_ip_cidr_from_json_ruleset_to_file "$json_tmpfile" "$subnets_tmpfile"
-    nft_add_set_elements_from_file_chunked "$subnets_tmpfile" "$NFT_TABLE_NAME" "$NFT_COMMON_SET_NAME"
+    nft_import_subnets_file_to_common_sets "$subnets_tmpfile"
     rm -f "$binary_tmpfile" "$json_tmpfile" "$subnets_tmpfile"
 }
 
@@ -1498,12 +1626,29 @@ import_subnets_from_remote_plain_file() {
     ruleset_tag=$(get_ruleset_tag "$section" "remote" "subnets")
     ruleset_filepath="$TMP_RULESET_FOLDER/$ruleset_tag.json"
     import_plain_subnet_list_to_local_source_ruleset_chunked "$tmpfile" "$ruleset_filepath"
-    nft_add_set_elements_from_file_chunked "$tmpfile" "$NFT_TABLE_NAME" "$NFT_COMMON_SET_NAME"
+    nft_import_subnets_file_to_common_sets "$tmpfile"
 
     rm -f "$tmpfile"
 }
 
 ## Support functions
+ipv6_enabled() {
+    local ipv6
+    config_get_bool ipv6 "settings" "ipv6" 0
+    [ "$ipv6" -eq 1 ]
+}
+
+# Imports a mixed IP list file into the common nft sets; IPv6 entries go to
+# the v6 set when the ipv6 option is enabled and are skipped otherwise
+nft_import_subnets_file_to_common_sets() {
+    local filepath="$1"
+
+    local set6_name=""
+    ipv6_enabled && set6_name="$NFT_COMMON_SET6_NAME"
+
+    nft_add_set_elements_from_file_chunked "$filepath" "$NFT_TABLE_NAME" "$NFT_COMMON_SET_NAME" 5000 "$set6_name"
+}
+
 get_service_proxy_address() {
     local download_lists_via_proxy
     config_get_bool download_lists_via_proxy "settings" "download_lists_via_proxy" 0
@@ -1611,6 +1756,23 @@ get_service_listen_address() {
 ## nftables
 nft_list_all_traffic_from_ip() {
     local ip="$1"
+
+    if is_ipv6_ip_or_ipv6_cidr "$ip"; then
+        if ! ipv6_enabled; then
+            log "Skipping fully routed IPv6 address $ip: IPv6 is disabled" "warn"
+            return 0
+        fi
+
+        if ! nft list chain inet "$NFT_TABLE_NAME" mangle | grep -q "saddr $ip"; then
+            nft insert rule inet "$NFT_TABLE_NAME" mangle iifname "@$NFT_INTERFACE_SET_NAME" ip6 saddr "$ip" \
+                meta l4proto tcp meta mark set "$NFT_FAKEIP_MARK" counter
+            nft insert rule inet "$NFT_TABLE_NAME" mangle iifname "@$NFT_INTERFACE_SET_NAME" ip6 saddr "$ip" \
+                meta l4proto udp meta mark set "$NFT_FAKEIP_MARK" counter
+            nft insert rule inet "$NFT_TABLE_NAME" mangle ip6 saddr "$ip" ip6 daddr "@$NFT_LOCALV6_SET_NAME" return
+        fi
+
+        return 0
+    fi
 
     if ! nft list chain inet "$NFT_TABLE_NAME" mangle | grep -q "ip saddr $ip"; then
         nft insert rule inet "$NFT_TABLE_NAME" mangle iifname "@$NFT_INTERFACE_SET_NAME" ip saddr "$ip" \
@@ -2180,7 +2342,8 @@ check_sing_box() {
         port_53_ok=1
     fi
 
-    if netstat -ln 2> /dev/null | grep -q "127.0.0.1:1602"; then
+    # With IPv6 enabled the tproxy inbound listens dual-stack on :::1602
+    if netstat -ln 2> /dev/null | grep -qE "127\.0\.0\.1:1602|:::1602"; then
         port_1602_ok=1
     fi
 
@@ -2643,6 +2806,17 @@ global_check() {
         print_global "✅ Sing-box works with FakeIP: $fakeip_address"
     else
         print_global "❌ Sing-box does NOT work with FakeIP: $fakeip_address"
+    fi
+
+    if ipv6_enabled; then
+        local fakeip_address6
+        fakeip_address6=$(dig +short AAAA @127.0.0.42 $FAKEIP_TEST_DOMAIN)
+
+        if echo "$fakeip_address6" | grep -q "^fc00:"; then
+            print_global "✅ Sing-box works with FakeIP for IPv6: $fakeip_address6"
+        else
+            print_global "❌ Sing-box does NOT work with FakeIP for IPv6: $fakeip_address6"
+        fi
     fi
 }
 

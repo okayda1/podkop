@@ -13,6 +13,19 @@ function validateIPV4(ip) {
   }
   return { valid: false, message: _("Invalid IP address") };
 }
+function validateIPV6(ip) {
+  const ipRegex = /^(([0-9A-Fa-f]{1,4}:){7}[0-9A-Fa-f]{1,4}|([0-9A-Fa-f]{1,4}:){1,7}:|([0-9A-Fa-f]{1,4}:){1,6}:[0-9A-Fa-f]{1,4}|([0-9A-Fa-f]{1,4}:){1,5}(:[0-9A-Fa-f]{1,4}){1,2}|([0-9A-Fa-f]{1,4}:){1,4}(:[0-9A-Fa-f]{1,4}){1,3}|([0-9A-Fa-f]{1,4}:){1,3}(:[0-9A-Fa-f]{1,4}){1,4}|([0-9A-Fa-f]{1,4}:){1,2}(:[0-9A-Fa-f]{1,4}){1,5}|[0-9A-Fa-f]{1,4}:((:[0-9A-Fa-f]{1,4}){1,6})|:((:[0-9A-Fa-f]{1,4}){1,7}|:))$/;
+  if (ipRegex.test(ip)) {
+    return { valid: true, message: _("Valid") };
+  }
+  return { valid: false, message: _("Invalid IP address") };
+}
+function validateIP(ip) {
+  if (validateIPV4(ip).valid || validateIPV6(ip).valid) {
+    return { valid: true, message: _("Valid") };
+  }
+  return { valid: false, message: _("Invalid IP address") };
+}
 
 // src/validators/validateDomain.ts
 function validateDomain(domain, allowDotTLD = false) {
@@ -39,6 +52,13 @@ function validateDomain(domain, allowDotTLD = false) {
 function validateDNS(value) {
   if (!value) {
     return { valid: false, message: _("DNS server address cannot be empty") };
+  }
+  if (validateIPV6(value).valid) {
+    return { valid: true, message: _("Valid") };
+  }
+  const bracketedMatch = value.match(/^\[([^\]]+)\](?::\d+)?$/);
+  if (bracketedMatch && validateIPV6(bracketedMatch[1]).valid) {
+    return { valid: true, message: _("Valid") };
   }
   const cleanedValueWithoutPort = value.replace(/:(\d+)(?=\/|$)/, "");
   const cleanedIpWithoutPath = cleanedValueWithoutPort.split("/")[0];
@@ -101,6 +121,25 @@ function validatePath(value) {
 
 // src/validators/validateSubnet.ts
 function validateSubnet(value) {
+  if (value.includes(":")) {
+    const [ip2, cidr2] = value.split("/");
+    const ipCheck2 = validateIPV6(ip2);
+    if (!ipCheck2.valid) {
+      return {
+        valid: false,
+        message: _("Invalid format. Use X::X or X::X/Y")
+      };
+    }
+    if (cidr2 !== void 0) {
+      if (!/^\d{1,3}$/.test(cidr2) || parseInt(cidr2, 10) > 128) {
+        return {
+          valid: false,
+          message: _("CIDR must be between 0 and 128")
+        };
+      }
+    }
+    return { valid: true, message: _("Valid") };
+  }
   const subnetRegex = /^(\d{1,3}\.){3}\d{1,3}(?:\/\d{1,2})?$/;
   if (!subnetRegex.test(value)) {
     return {
@@ -134,6 +173,28 @@ function bulkValidate(values, validate) {
   return {
     valid: results.every((r) => r.valid),
     results
+  };
+}
+
+// src/helpers/splitHostPort.ts
+function splitHostPort(hostPort) {
+  if (hostPort.startsWith("[")) {
+    const closingIndex = hostPort.indexOf("]");
+    if (closingIndex === -1) {
+      return { host: "", port: void 0 };
+    }
+    const host = hostPort.slice(1, closingIndex);
+    const rest = hostPort.slice(closingIndex + 1);
+    const port = rest.startsWith(":") ? rest.slice(1) : void 0;
+    return { host, port };
+  }
+  const separatorIndex = hostPort.indexOf(":");
+  if (separatorIndex === -1) {
+    return { host: hostPort, port: void 0 };
+  }
+  return {
+    host: hostPort.slice(0, separatorIndex),
+    port: hostPort.slice(separatorIndex + 1)
   };
 }
 
@@ -187,7 +248,7 @@ function validateShadowsocksUrl(url) {
         message: _("Invalid Shadowsocks URL: missing server address")
       };
     }
-    const [server, portAndRest] = serverPart.split(":");
+    const { host: server, port: portAndRest } = splitHostPort(serverPart);
     if (!server) {
       return {
         valid: false,
@@ -260,7 +321,7 @@ function validateVlessUrl(url) {
       return { valid: false, message: "Invalid VLESS URL: missing UUID" };
     if (!hostPortPart)
       return { valid: false, message: "Invalid VLESS URL: missing server" };
-    const [host, port] = hostPortPart.split(":");
+    const { host, port } = splitHostPort(hostPortPart);
     if (!host)
       return { valid: false, message: "Invalid VLESS URL: missing hostname" };
     if (!port)
@@ -365,7 +426,7 @@ function validateTrojanUrl(url) {
         valid: false,
         message: "Invalid Trojan URL: missing hostname and port"
       };
-    const [host, port] = hostPortPart.split(":");
+    const { host, port } = splitHostPort(hostPortPart);
     if (!host)
       return { valid: false, message: "Invalid Trojan URL: missing hostname" };
     if (!port)
@@ -417,7 +478,7 @@ function validateSocksUrl(url) {
         message: _("Invalid SOCKS URL: missing host and port")
       };
     }
-    const [host, port] = hostPortPart.split(":");
+    const { host, port } = splitHostPort(hostPortPart);
     if (!host) {
       return {
         valid: false,
@@ -435,8 +496,9 @@ function validateSocksUrl(url) {
       };
     }
     const ipv4Result = validateIPV4(host);
+    const ipv6Result = validateIPV6(host);
     const domainResult = validateDomain(host);
-    if (!ipv4Result.valid && !domainResult.valid) {
+    if (!ipv4Result.valid && !ipv6Result.valid && !domainResult.valid) {
       return {
         valid: false,
         message: _("Invalid SOCKS URL: invalid host format")
@@ -480,7 +542,7 @@ function validateHysteria2Url(url) {
         valid: false,
         message: _("Invalid HY2 URL: missing host & port")
       };
-    const [host, port] = hostPortPart.split(":");
+    const { host, port } = splitHostPort(hostPortPart);
     if (!host)
       return { valid: false, message: _("Invalid HY2 URL: missing host") };
     if (!port)
@@ -4928,7 +4990,9 @@ return baseclass.extend({
   svgEl,
   validateDNS,
   validateDomain,
+  validateIP,
   validateIPV4,
+  validateIPV6,
   validateOutboundJson,
   validatePath,
   validateProxyUrl,

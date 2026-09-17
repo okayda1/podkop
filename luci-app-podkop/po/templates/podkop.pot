@@ -308,7 +308,11 @@ msgid "Enter domain names without protocols, e.g. example.com or sub.example.com
 msgstr ""
 
 #: ../luci-app-podkop/htdocs/luci-static/resources/view/podkop/section.js:480
-msgid "Enter subnets in CIDR notation (e.g. 103.21.244.0/22) or single IP addresses"
+msgid "Enter subnets in CIDR notation (e.g. 103.21.244.0/22 or 2606:4700::/32) or single IP addresses. IPv6 entries are applied only when IPv6 Support is enabled on the Settings tab"
+msgstr ""
+
+#: ../luci-app-podkop/htdocs/luci-static/resources/view/podkop/section.js:537
+msgid "Enter subnets in CIDR notation or single IP addresses, separated by commas, spaces, or newlines. You can add comments using //. IPv6 entries are applied only when IPv6 Support is enabled on the Settings tab"
 msgstr ""
 
 #: ../luci-app-podkop/htdocs/luci-static/resources/view/podkop/section.js:138
@@ -367,6 +371,18 @@ msgstr ""
 
 #: src/podkop/api.ts:27
 msgid "HTTP error"
+msgstr ""
+
+#: ../luci-app-podkop/htdocs/luci-static/resources/view/podkop/settings.js:413
+msgid "IPv6 Support"
+msgstr ""
+
+#: ../luci-app-podkop/htdocs/luci-static/resources/view/podkop/section.js:26
+msgid "IPv6 Support is disabled"
+msgstr ""
+
+#: ../luci-app-podkop/htdocs/luci-static/resources/view/podkop/section.js:28
+msgid "You have entered IPv6 addresses or subnets, but they will be ignored until IPv6 Support is enabled on the Settings tab."
 msgstr ""
 
 #: ../luci-app-podkop/htdocs/luci-static/resources/view/podkop/settings.js:189
@@ -717,6 +733,10 @@ msgstr ""
 msgid "Restart podkop"
 msgstr ""
 
+#: ../luci-app-podkop/htdocs/luci-static/resources/view/podkop/settings.js:414
+msgid "Route IPv6 traffic through the tunnel: IPv6 destinations from the lists and FakeIP AAAA answers (fc00::/18) are proxied. Enable only if your network uses IPv6 and avoid assigning LAN ULA addresses inside fc00::/18"
+msgstr ""
+
 #: src/podkop/tabs/diagnostic/checks/runFakeIPCheck.ts:51
 msgid "Router DNS is not routed through sing-box"
 msgstr ""
@@ -892,7 +912,7 @@ msgid "Specify a local IP address to be excluded from routing"
 msgstr ""
 
 #: ../luci-app-podkop/htdocs/luci-static/resources/view/podkop/section.js:639
-msgid "Specify local IP addresses or subnets whose traffic will always be routed through the configured route"
+msgid "Specify local IP addresses or subnets whose traffic will always be routed through the configured route. IPv6 entries are applied only when IPv6 Support is enabled on the Settings tab"
 msgstr ""
 
 #: ../luci-app-podkop/htdocs/luci-static/resources/view/podkop/section.js:593

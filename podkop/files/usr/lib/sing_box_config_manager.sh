@@ -213,24 +213,27 @@ sing_box_cm_add_https_dns_server() {
 #   config: string (JSON), sing-box configuration to modify
 #   tag: string, identifier for the DNS server
 #   inet4_range: string, IPv4 range used for fake IP mapping
+#   inet6_range: string, IPv6 range used for fake IP mapping (optional)
 # Outputs:
 #   Writes updated JSON configuration to stdout
 # Example:
-#   CONFIG=$(sing_box_cm_add_fakeip_dns_server "$CONFIG" "fakeip-server" "198.18.0.0/15")
+#   CONFIG=$(sing_box_cm_add_fakeip_dns_server "$CONFIG" "fakeip-server" "198.18.0.0/15" "fc00::/18")
 #######################################
 sing_box_cm_add_fakeip_dns_server() {
     local config="$1"
     local tag="$2"
     local inet4_range="$3"
+    local inet6_range="$4"
 
     echo "$config" | jq \
         --arg tag "$tag" \
         --arg inet4_range "$inet4_range" \
+        --arg inet6_range "$inet6_range" \
         '.dns.servers += [{
 			type: "fakeip",
 			tag: $tag,
 			inet4_range: $inet4_range,
-		}]'
+		} + (if $inet6_range != "" then { inet6_range: $inet6_range } else {} end)]'
 }
 
 #######################################

@@ -24,6 +24,24 @@ export const invalidSubnets = [
   ['Forbidden 0.0.0.0', '0.0.0.0'],
 ];
 
+export const validSubnetsV6 = [
+  ['Simple IPv6', '2001:db8::1'],
+  ['With CIDR /32', '2606:4700::/32'],
+  ['CIDR /0', '::/0'],
+  ['CIDR /128', '2001:db8::1/128'],
+  ['Loopback', '::1'],
+  ['ULA with mask', 'fd00::/8'],
+];
+
+export const invalidSubnetsV6 = [
+  ['Invalid hex', 'gggg::1'],
+  ['Double compression', '2001::db8::1'],
+  ['Invalid CIDR (too high)', '2001:db8::/129'],
+  ['Invalid CIDR (negative)', '2001:db8::/-1'],
+  ['CIDR not number', '2001:db8::/abc'],
+  ['Triple colon', ':::1'],
+];
+
 describe('validateSubnet', () => {
   describe.each(validSubnets)('Valid subnet: %s', (_desc, subnet) => {
     it(`returns {valid:true} for "${subnet}"`, () => {
@@ -38,4 +56,21 @@ describe('validateSubnet', () => {
       expect(res.valid).toBe(false);
     });
   });
+
+  describe.each(validSubnetsV6)('Valid IPv6 subnet: %s', (_desc, subnet) => {
+    it(`returns {valid:true} for "${subnet}"`, () => {
+      const res = validateSubnet(subnet);
+      expect(res.valid).toBe(true);
+    });
+  });
+
+  describe.each(invalidSubnetsV6)(
+    'Invalid IPv6 subnet: %s',
+    (_desc, subnet) => {
+      it(`returns {valid:false} for "${subnet}"`, () => {
+        const res = validateSubnet(subnet);
+        expect(res.valid).toBe(false);
+      });
+    },
+  );
 });

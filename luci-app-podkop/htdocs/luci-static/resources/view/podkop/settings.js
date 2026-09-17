@@ -148,9 +148,7 @@ function createSettingsContent(section) {
     }
 
     // Reject lan*
-    if (
-        value.startsWith("lan")
-    ) {
+    if (value.startsWith("lan")) {
       return false;
     }
 
@@ -244,7 +242,9 @@ function createSettingsContent(section) {
     form.Flag,
     "enable_yacd_wan_access",
     _("Enable YACD WAN Access"),
-    _("Allows access to YACD from the WAN. Make sure to open the appropriate port in your firewall."),
+    _(
+      "Allows access to YACD from the WAN. Make sure to open the appropriate port in your firewall.",
+    ),
   );
   o.depends("enable_yacd", "1");
   o.default = "0";
@@ -254,7 +254,9 @@ function createSettingsContent(section) {
     form.Value,
     "yacd_secret_key",
     _("YACD Secret Key"),
-    _("Secret key for authenticating remote access to YACD when WAN access is enabled."),
+    _(
+      "Secret key for authenticating remote access to YACD when WAN access is enabled.",
+    ),
   );
   o.depends("enable_yacd_wan_access", "1");
   o.rmempty = false;
@@ -311,7 +313,11 @@ function createSettingsContent(section) {
 
     for (const secName in sections) {
       const sec = sections[secName];
-      if (sec[".type"] === "section" && sec['connection_type'] !== 'block' && sec['connection_type'] !== 'exclusion') {
+      if (
+        sec[".type"] === "section" &&
+        sec["connection_type"] !== "block" &&
+        sec["connection_type"] !== "exclusion"
+      ) {
         this.keylist.push(secName);
         this.vallist.push(secName);
       }
@@ -382,9 +388,7 @@ function createSettingsContent(section) {
     form.ListValue,
     "log_level",
     _("Log Level"),
-    _(
-      "Select the log level for sing-box",
-    ),
+    _("Select the log level for sing-box"),
   );
   o.value("trace", "Trace");
   o.value("debug", "Debug");
@@ -408,6 +412,17 @@ function createSettingsContent(section) {
   o.rmempty = false;
 
   o = section.option(
+    form.Flag,
+    "ipv6",
+    _("IPv6 Support"),
+    _(
+      "Route IPv6 traffic through the tunnel: IPv6 destinations from the lists and FakeIP AAAA answers (fc00::/18) are proxied. Enable only if your network uses IPv6 and avoid assigning LAN ULA addresses inside fc00::/18",
+    ),
+  );
+  o.default = "0";
+  o.rmempty = false;
+
+  o = section.option(
     form.DynamicList,
     "routing_excluded_ips",
     _("Routing Excluded IPs"),
@@ -421,7 +436,7 @@ function createSettingsContent(section) {
       return true;
     }
 
-    const validation = main.validateIPV4(value);
+    const validation = main.validateIP(value);
 
     if (validation.valid) {
       return true;

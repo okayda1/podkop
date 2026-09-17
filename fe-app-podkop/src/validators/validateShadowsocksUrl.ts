@@ -1,4 +1,5 @@
 import { ValidationResult } from './types';
+import { splitHostPort } from '../helpers/splitHostPort';
 
 // TODO refactor current validation and add tests
 export function validateShadowsocksUrl(url: string): ValidationResult {
@@ -59,7 +60,7 @@ export function validateShadowsocksUrl(url: string): ValidationResult {
       };
     }
 
-    const [server, portAndRest] = serverPart.split(':');
+    const { host: server, port: portAndRest } = splitHostPort(serverPart);
 
     if (!server) {
       return {

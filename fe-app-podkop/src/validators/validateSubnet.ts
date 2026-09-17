@@ -1,7 +1,31 @@
 import { ValidationResult } from './types';
-import { validateIPV4 } from './validateIp';
+import { validateIPV4, validateIPV6 } from './validateIp';
 
 export function validateSubnet(value: string): ValidationResult {
+  if (value.includes(':')) {
+    // IPv6: must be in form X::X or X::X/Y
+    const [ip, cidr] = value.split('/');
+
+    const ipCheck = validateIPV6(ip);
+    if (!ipCheck.valid) {
+      return {
+        valid: false,
+        message: _('Invalid format. Use X::X or X::X/Y'),
+      };
+    }
+
+    if (cidr !== undefined) {
+      if (!/^\d{1,3}$/.test(cidr) || parseInt(cidr, 10) > 128) {
+        return {
+          valid: false,
+          message: _('CIDR must be between 0 and 128'),
+        };
+      }
+    }
+
+    return { valid: true, message: _('Valid') };
+  }
+
   // Must be in form X.X.X.X or X.X.X.X/Y
   const subnetRegex = /^(\d{1,3}\.){3}\d{1,3}(?:\/\d{1,2})?$/;
 

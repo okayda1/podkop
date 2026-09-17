@@ -98,11 +98,15 @@ import_plain_domain_list_to_local_source_ruleset_chunked() {
     fi
 }
 
-# Imports a plain IPv4/CIDR list into a ruleset in chunks, validating entries and appending them as ip_cidr rules
+# Imports a plain IP/CIDR list into a ruleset in chunks, validating entries and appending them as ip_cidr rules;
+# IPv6 entries are accepted only when the global ipv6 option is enabled
 import_plain_subnet_list_to_local_source_ruleset_chunked() {
     local plain_list_filepath="$1"
     local ruleset_filepath="$2"
     local chunk_size="${3:-1000}"
+
+    local allow_ipv6=0
+    ipv6_enabled && allow_ipv6=1
 
     local array count json_array
     count=0
@@ -111,8 +115,13 @@ import_plain_subnet_list_to_local_source_ruleset_chunked() {
 
         [ -z "$line" ] && continue
 
-        if ! is_ipv4 "$line" && ! is_ipv4_cidr "$line"; then
-            log "'$line' is not IPv4 or IPv4 CIDR" "debug"
+        if is_ipv6 "$line" || is_ipv6_cidr "$line"; then
+            if [ "$allow_ipv6" -eq 0 ]; then
+                log "'$line' skipped: IPv6 is disabled" "debug"
+                continue
+            fi
+        elif ! is_ipv4 "$line" && ! is_ipv4_cidr "$line"; then
+            log "'$line' is not an IP address or CIDR" "debug"
             continue
         fi
 

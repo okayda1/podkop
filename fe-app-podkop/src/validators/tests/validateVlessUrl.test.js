@@ -8,6 +8,10 @@ const validUrls = [
     'vless://94792286-7bbe-4f33-8b36-18d1bbf70723@127.0.0.1:34520?type=tcp&encryption=none&security=none#vless-tcp-none',
   ],
   [
+    'tcp + none + IPv6 host',
+    'vless://94792286-7bbe-4f33-8b36-18d1bbf70723@[2001:db8::1]:34520?type=tcp&encryption=none&security=none#vless-tcp-none-v6',
+  ],
+  [
     'tcp + reality',
     'vless://e95163dc-905e-480a-afe5-20b146288679@127.0.0.1:16399?type=tcp&encryption=none&security=reality&pbk=tqhSkeDR6jsqC-BYCnZWBrdL33g705ba8tV5-ZboWTM&fp=chrome&sni=google.com&sid=f6&spx=%2F#vless-tcp-reality',
   ],
