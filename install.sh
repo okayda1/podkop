@@ -224,11 +224,6 @@ check_system() {
         exit 1
     fi
 
-    if [ "$openwrt_version" != "24" ]; then
-        msg "Поддерживается только OpenWrt 24.10: сборки podkop публикуются только в формате ipk для этой версии"
-        exit 1
-    fi
-
     # Check available space
     AVAILABLE_SPACE=$(df /overlay | awk 'NR==2 {print $4}')
     REQUIRED_SPACE=15360 # 15MB in KB
