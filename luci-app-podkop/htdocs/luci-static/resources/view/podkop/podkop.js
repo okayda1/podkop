@@ -91,6 +91,9 @@ const EntryPoint = {
     // Render dashboard content
     dashboard.createDashboardContent(dashboardSection);
 
+    // Load the manual list file before rendering (file-backed editor)
+    await settings.preloadManualList();
+
     // Inject core service
     main.coreService();
 

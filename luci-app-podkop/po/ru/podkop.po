@@ -7,8 +7,8 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PODKOP\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-13 16:25+0400\n"
-"PO-Revision-Date: 2026-10-13 16:25+0400\n"
+"POT-Creation-Date: 2026-10-13 16:28+0400\n"
+"PO-Revision-Date: 2026-10-13 16:28+0400\n"
 "Last-Translator: okayda1\n"
 "Language-Team: none\n"
 "Language: ru\n"
@@ -209,6 +209,9 @@ msgstr "Загрузка всех списков через указанный �
 msgid "Dynamic List"
 msgstr "Динамический список"
 
+msgid "Edits the manual list file /etc/podkop-manual.lst. Enter domain names separated by commas, spaces, or newlines. You can add comments using //. Saving rebuilds routing lists and restarts podkop"
+msgstr "Редактирует файл ручного списка /etc/podkop-manual.lst. Вводите домены через запятые, пробелы или переносы строк; комментарии — через //. При сохранении списки маршрутизации пересобираются, а podkop перезапускается"
+
 msgid "Enable autostart"
 msgstr "Включить автостарт"
 
@@ -274,6 +277,9 @@ msgstr "Не удалось скопировать!"
 
 msgid "Failed to execute!"
 msgstr "Не удалось выполнить!"
+
+msgid "Failed to save the manual list: %s"
+msgstr "Не удалось сохранить ручной список: %s"
 
 msgid "Fallback URLs"
 msgstr "Резервные ссылки"
@@ -460,6 +466,12 @@ msgstr "Уровень логов"
 
 msgid "Main DNS"
 msgstr "Основной DNS"
+
+msgid "Manual Domains List"
+msgstr "Ручной список доменов"
+
+msgid "Manual list saved. Rebuilding routing lists and restarting podkop in the background (log: /tmp/podkop-manual-apply.log)"
+msgstr "Ручной список сохранён. Списки маршрутизации пересобираются, podkop перезапускается в фоне (лог: /tmp/podkop-manual-apply.log)"
 
 msgid "Memory Usage"
 msgstr "Использование памяти"

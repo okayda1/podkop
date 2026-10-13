@@ -2,9 +2,62 @@
 "require form";
 "require uci";
 "require ui";
+"require fs";
 "require baseclass";
 "require tools.widgets as widgets";
 "require view.podkop.main as main";
+
+const MANUAL_LIST_PATH = "/etc/podkop-manual.lst";
+const UPDATE_LISTS_SCRIPT = "/root/update-blocked-domains.sh";
+const APPLY_LOG_PATH = "/tmp/podkop-manual-apply.log";
+
+const manualListCache = { content: "" };
+
+// Loads the manual list file into the cache before the form renders,
+// because LuCI option values are read synchronously via cfgvalue()
+async function preloadManualList() {
+  try {
+    manualListCache.content = await fs.read(MANUAL_LIST_PATH);
+  } catch (e) {
+    console.warn("[Podkop] Failed to read " + MANUAL_LIST_PATH + ": " + e);
+    manualListCache.content = "";
+  }
+}
+
+// Writes the manual list file, then rebuilds routing lists and restarts
+// podkop in the background (output goes to APPLY_LOG_PATH)
+function applyManualList(value) {
+  if (value === manualListCache.content) return Promise.resolve();
+
+  return fs
+    .write(MANUAL_LIST_PATH, value)
+    .then(() => {
+      manualListCache.content = value;
+      ui.addNotification(
+        "info",
+        E(
+          "p",
+          {},
+          _(
+            "Manual list saved. Rebuilding routing lists and restarting podkop in the background (log: /tmp/podkop-manual-apply.log)",
+          ),
+        ),
+      );
+      return fs.exec("/bin/sh", [
+        "-c",
+        "( %s; /etc/init.d/podkop restart ) >%s 2>&1 &".format(
+          UPDATE_LISTS_SCRIPT,
+          APPLY_LOG_PATH,
+        ),
+      ]);
+    })
+    .catch((err) => {
+      ui.addNotification(
+        "error",
+        E("p", {}, _("Failed to save the manual list: %s").format(err.message || err)),
+      );
+    });
+}
 
 function createSettingsContent(section, singBoxFeatures = []) {
   let o = section.option(
@@ -468,6 +521,59 @@ function createSettingsContent(section, singBoxFeatures = []) {
   o.remove = function () {
     return applyRoutingExcludedIps([]);
   };
+
+  o = section.option(
+    form.TextValue,
+    "manual_domains_list",
+    _("Manual Domains List"),
+    _(
+      "Edits the manual list file /etc/podkop-manual.lst. Enter domain names separated by commas, spaces, or newlines. You can add comments using //. Saving rebuilds routing lists and restarts podkop",
+    ),
+  );
+  o.placeholder =
+    "example.com, sub.example.com\n// Social networks\ndomain.com test.com // personal domains";
+  o.rows = 10;
+  o.rmempty = false;
+  o.cfgvalue = function (section_id) {
+    return manualListCache.content;
+  };
+  o.validate = function (section_id, value) {
+    // Optional
+    if (!value || value.length === 0) {
+      return true;
+    }
+
+    const domains = main.parseValueList(value);
+
+    if (!domains.length) {
+      return _(
+        "At least one valid domain must be specified. Comments-only content is not allowed.",
+      );
+    }
+
+    const { valid, results } = main.bulkValidate(domains, (row) =>
+      main.validateDomain(row, true),
+    );
+
+    if (!valid) {
+      const errors = results
+        .filter((validation) => !validation.valid)
+        .map((validation) => `${validation.value}: ${validation.message}`);
+
+      return [_("Validation errors:"), ...errors].join("\n");
+    }
+
+    return true;
+  };
+  // The list is handed to /etc/podkop-manual.lst instead of being written
+  // through uci: update-blocked-domains.sh merges it into the routing lists
+  // and the podkop restart applies them. Nothing is staged in uci.
+  o.write = function (section_id, value) {
+    return applyManualList(value || "");
+  };
+  o.remove = function () {
+    return applyManualList("");
+  };
 }
 
 async function applyRoutingExcludedIps(value) {
@@ -487,6 +593,7 @@ async function applyRoutingExcludedIps(value) {
 
 const EntryPoint = {
   createSettingsContent,
+  preloadManualList,
 };
 
 return baseclass.extend(EntryPoint);

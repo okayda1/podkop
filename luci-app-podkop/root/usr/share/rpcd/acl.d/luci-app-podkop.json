@@ -8,6 +8,9 @@
         ],
         "/usr/bin/podkop": [
           "exec"
+        ],
+        "/etc/podkop-manual.lst": [
+          "read"
         ]
       },
       "ubus": {
@@ -20,6 +23,17 @@
       ]
     },
     "write": {
+      "file": {
+        "/etc/podkop-manual.lst": [
+          "write"
+        ],
+        "/bin/sh": [
+          "exec"
+        ],
+        "/root/update-blocked-domains.sh": [
+          "exec"
+        ]
+      },
       "uci": [
         "podkop"
       ]
