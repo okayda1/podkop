@@ -5,39 +5,7 @@
 "require tools.widgets as widgets";
 "require view.podkop.main as main";
 
-let ipv6DisabledNoticeShown = false;
-
-// Shows a one-time warning when the user enters IPv6 values while
-// the global IPv6 Support toggle on the Settings tab is off
-function notifyIgnoredIPv6(optionObj, value) {
-  try {
-    const values = Array.isArray(value) ? value : [value];
-    const hasIPv6Entry = values.some(
-      (v) => typeof v === "string" && v.includes(":"),
-    );
-    if (!hasIPv6Entry || ipv6DisabledNoticeShown) return;
-
-    const lookup = optionObj.map.lookupOption("ipv6", "settings");
-    if (!lookup || !lookup[0]) return;
-    if (lookup[0].formvalue("settings") === "1") return;
-
-    ipv6DisabledNoticeShown = true;
-    ui.addNotification(
-      null,
-      E("p", { class: "alert-message warning" }, [
-        E("strong", {}, _("IPv6 Support is disabled")),
-        E("br"),
-        _(
-          "You have entered IPv6 addresses or subnets, but they will be ignored until IPv6 Support is enabled on the Settings tab.",
-        ),
-      ]),
-    );
-  } catch (e) {
-    console.error("Error in IPv6 notice handler:", e);
-  }
-}
-
-function createSectionContent(section) {
+function createSectionContent(section, singBoxFeatures = []) {
   let o = section.option(
     form.ListValue,
     "connection_type",
@@ -66,7 +34,7 @@ function createSectionContent(section) {
     form.TextValue,
     "proxy_string",
     _("Proxy Configuration URL"),
-    _("vless://, ss://, trojan://, socks4/5://, hy2/hysteria2:// links"),
+    _("vless://, ss://, trojan://, socks4/5://, hy2/hysteria2:// links")
   );
   o.depends("proxy_config_type", "url");
   o.rows = 5;
@@ -118,7 +86,7 @@ function createSectionContent(section) {
     form.DynamicList,
     "selector_proxy_links",
     _("Selector Proxy Links"),
-    _("vless://, ss://, trojan://, socks4/5://, hy2/hysteria2:// links"),
+    _("vless://, ss://, trojan://, socks4/5://, hy2/hysteria2:// links")
   );
   o.depends("proxy_config_type", "selector");
   o.rmempty = false;
@@ -141,7 +109,7 @@ function createSectionContent(section) {
     form.DynamicList,
     "urltest_proxy_links",
     _("URLTest Proxy Links"),
-    _("vless://, ss://, trojan://, socks4/5://, hy2/hysteria2:// links"),
+    _("vless://, ss://, trojan://, socks4/5://, hy2/hysteria2:// links")
   );
   o.depends("proxy_config_type", "urltest");
   o.rmempty = false;
@@ -160,11 +128,35 @@ function createSectionContent(section) {
     return validation.message;
   };
 
+  if (singBoxFeatures.includes("urltest.fallbacks")) {
+    o = section.option(
+      form.DynamicList,
+      "urltest_fallback_links",
+      _("Fallback URLs"),
+      _("Used in this order only while none of the URLTest proxy links responds")
+    );
+    o.depends("proxy_config_type", "urltest");
+    o.validate = function (section_id, value) {
+      // Optional
+      if (!value || value.length === 0) {
+        return true;
+      }
+
+      const validation = main.validateProxyUrl(value);
+
+      if (validation.valid) {
+        return true;
+      }
+
+      return validation.message;
+    };
+  }
+
   o = section.option(
     form.ListValue,
     "urltest_check_interval",
     _("URLTest Check Interval"),
-    _("The interval between connectivity tests"),
+    _("The interval between connectivity tests")
   );
   o.value("30s", _("Every 30 seconds"));
   o.value("1m", _("Every 1 minute"));
@@ -177,9 +169,7 @@ function createSectionContent(section) {
     form.Value,
     "urltest_tolerance",
     _("URLTest Tolerance"),
-    _(
-      "The maximum difference in response times (ms) allowed when comparing servers",
-    ),
+    _("The maximum difference in response times (ms) allowed when comparing servers")
   );
   o.default = "50";
   o.rmempty = false;
@@ -191,38 +181,23 @@ function createSectionContent(section) {
 
     const parsed = parseFloat(value);
 
-    if (
-      /^[0-9]+$/.test(value) &&
-      !isNaN(parsed) &&
-      isFinite(parsed) &&
-      parsed >= 50 &&
-      parsed <= 1000
-    ) {
+    if (/^[0-9]+$/.test(value) && !isNaN(parsed) && isFinite(parsed) && parsed >= 50 && parsed <= 1000) {
       return true;
     }
 
-    return _("Must be a number in the range of 50 - 1000");
+    return _('Must be a number in the range of 50 - 1000');
   };
 
   o = section.option(
     form.Value,
     "urltest_testing_url",
     _("URLTest Testing URL"),
-    _("The URL used to test server connectivity"),
+    _("The URL used to test server connectivity")
   );
-  o.value(
-    "https://www.gstatic.com/generate_204",
-    "https://www.gstatic.com/generate_204 (Google)",
-  );
-  o.value(
-    "https://cp.cloudflare.com/generate_204",
-    "https://cp.cloudflare.com/generate_204 (Cloudflare)",
-  );
+  o.value("https://www.gstatic.com/generate_204", "https://www.gstatic.com/generate_204 (Google)");
+  o.value("https://cp.cloudflare.com/generate_204", "https://cp.cloudflare.com/generate_204 (Cloudflare)");
   o.value("https://captive.apple.com", "https://captive.apple.com (Apple)");
-  o.value(
-    "https://connectivity-check.ubuntu.com",
-    "https://connectivity-check.ubuntu.com (Ubuntu)",
-  );
+  o.value("https://connectivity-check.ubuntu.com", "https://connectivity-check.ubuntu.com (Ubuntu)")
   o.default = "https://www.gstatic.com/generate_204";
   o.rmempty = false;
   o.depends("proxy_config_type", "urltest");
@@ -240,6 +215,47 @@ function createSectionContent(section) {
 
     return validation.message;
   };
+
+  if (singBoxFeatures.includes("urltest.download_url")) {
+    o = section.option(
+      form.ListValue,
+      "urltest_download_check",
+      _("Download Check"),
+      _("Before switching to a server, 64 KiB is downloaded through it, so a server that freezes connections after about 16 KB is skipped")
+    );
+    o.value("default", _("Default"));
+    o.value("off", _("Disabled"));
+    o.value("custom", _("Custom URL"));
+    o.default = "default";
+    o.depends("proxy_config_type", "urltest");
+
+    o = section.option(
+      form.Value,
+      "urltest_download_url",
+      _("Download Check URL"),
+      _("The URL must serve at least 64 KiB or announce a shorter length")
+    );
+    Object.entries(main.URLTEST_DOWNLOAD_URL_OPTIONS).forEach(([key, label]) => {
+      o.value(key, _(label));
+    });
+    o.default = "https://speed.cloudflare.com/__down?bytes=65536";
+    o.rmempty = false;
+    o.depends({ proxy_config_type: "urltest", urltest_download_check: "custom" });
+
+    o.validate = function (section_id, value) {
+      if (!value || value.length === 0) {
+        return true;
+      }
+
+      const validation = main.validateUrl(value);
+
+      if (validation.valid) {
+        return true;
+      }
+
+      return validation.message;
+    };
+  }
 
   o = section.option(
     form.Flag,
@@ -527,7 +543,7 @@ function createSectionContent(section) {
     "user_subnets",
     _("User Subnets"),
     _(
-      "Enter subnets in CIDR notation (e.g. 103.21.244.0/22 or 2606:4700::/32) or single IP addresses. IPv6 entries are applied only when IPv6 Support is enabled on the Settings tab",
+      "Enter subnets in CIDR notation (e.g. 103.21.244.0/22) or single IP addresses",
     ),
   );
   o.placeholder = "IP or subnet";
@@ -547,16 +563,14 @@ function createSectionContent(section) {
 
     return validation.message;
   };
-  o.onchange = function (ev, section_id, value) {
-    notifyIgnoredIPv6(this, value);
-  };
 
   o = section.option(
     form.TextValue,
     "user_subnets_text",
     _("User Subnets List"),
     _(
-      "Enter subnets in CIDR notation or single IP addresses, separated by commas, spaces, or newlines. You can add comments using //. IPv6 entries are applied only when IPv6 Support is enabled on the Settings tab",
+      "Enter subnets in CIDR notation or single IP addresses, separated by commas, spaces, or newlines. " +
+        "You can add comments using //",
     ),
   );
   o.placeholder =
@@ -589,9 +603,6 @@ function createSectionContent(section) {
     }
 
     return true;
-  };
-  o.onchange = function (ev, section_id, value) {
-    notifyIgnoredIPv6(this, main.parseValueList(value || ""));
   };
 
   o = section.option(
@@ -691,7 +702,7 @@ function createSectionContent(section) {
     "fully_routed_ips",
     _("Fully Routed IPs"),
     _(
-      "Specify local IP addresses or subnets whose traffic will always be routed through the configured route. IPv6 entries are applied only when IPv6 Support is enabled on the Settings tab",
+      "Specify local IP addresses or subnets whose traffic will always be routed through the configured route",
     ),
   );
   o.placeholder = "192.168.1.2 or 192.168.1.0/24";
@@ -711,9 +722,6 @@ function createSectionContent(section) {
     }
 
     return validation.message;
-  };
-  o.onchange = function (ev, section_id, value) {
-    notifyIgnoredIPv6(this, value);
   };
 
   o = section.option(

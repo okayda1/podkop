@@ -89,4 +89,6 @@ export const PodkopShellMethods = {
     callBaseMethod<Podkop.GetSystemInfo>(
       Podkop.AvailableMethods.GET_SYSTEM_INFO,
     ),
+  getSingBoxFeatures: async () =>
+    callBaseMethod<string[]>(Podkop.AvailableMethods.GET_SING_BOX_FEATURES),
 };

@@ -35,6 +35,7 @@ SB_FAKEIP_INET4_RANGE="198.18.0.0/15"
 SB_FAKEIP_INET6_RANGE="fc00::/18"
 SB_BOOTSTRAP_SERVER_TAG="bootstrap-dns-server"
 SB_FAKEIP_DNS_RULE_TAG="fakeip-dns-rule-tag"
+SB_FAKEIP_SERVICE_DNS_RULE_TAG="fakeip-service-dns-rule-tag"
 SB_INVERT_FAKEIP_DNS_RULE_TAG="invert-fakeip-dns-rule-tag"
 # Inbounds
 SB_TPROXY_INBOUND_TAG="tproxy-in"
@@ -60,6 +61,7 @@ SB_ROUTING_EXCLUDED_IPS_RULESET_FILEPATH="$TMP_RULESET_FOLDER/$SB_ROUTING_EXCLUD
 SB_ROUTING_EXCLUDED_IPS_PLACEHOLDER="0.0.0.0/32"
 # Experimental
 SB_CLASH_API_CONTROLLER_PORT=9090
+SB_UTLS_FALLBACK_FINGERPRINTS="safari,randomized,edge,firefox,chrome"
 
 ## Lists
 GITHUB_RAW_URL="https://raw.githubusercontent.com/itdoginfo/allow-domains/main"
