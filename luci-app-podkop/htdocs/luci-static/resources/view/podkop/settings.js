@@ -118,6 +118,43 @@ function createSettingsContent(section, singBoxFeatures = []) {
 
   o = section.option(
     form.Value,
+    "fallback_dns_server",
+    _("DNS failover chain"),
+    _(
+      "Comma-separated fallback resolvers used when the main DNS server is unreachable, checked left to right. The special entry dhcp expands to the WAN resolvers from DHCP; 0 disables failover",
+    ),
+  );
+  o.value("77.88.8.8,dhcp", _("Yandex + provider (recommended)"));
+  o.value("77.88.8.8", _("Yandex"));
+  o.value("dhcp", _("Provider DNS (from DHCP)"));
+  o.value("0", _("Disabled"));
+  o.default = "77.88.8.8,dhcp";
+  o.rmempty = false;
+  o.validate = function (section_id, value) {
+    if (!value) {
+      return _("Set a resolver chain or 0 to disable failover");
+    }
+    if (value === "0") {
+      return true;
+    }
+    const entries = value.split(",").map((s) => s.trim()).filter(Boolean);
+    if (!entries.length) {
+      return _("Set a resolver chain or 0 to disable failover");
+    }
+    for (const entry of entries) {
+      if (entry === "dhcp") {
+        continue;
+      }
+      const validation = main.validateDNS(entry);
+      if (!validation.valid) {
+        return _("Invalid entry %s: %s").format(entry, validation.message);
+      }
+    }
+    return true;
+  };
+
+  o = section.option(
+    form.Value,
     "dns_rewrite_ttl",
     _("DNS Rewrite TTL"),
     _("Time in seconds for DNS record caching (default: 60)"),

@@ -59,6 +59,33 @@ msgstr "Bootstrap DNS"
 msgid "Bootstrap DNS server"
 msgstr "Bootstrap DNS-сервер"
 
+msgid "DNS failover chain"
+msgstr "Цепочка DNS-failover"
+
+msgid ""
+"Comma-separated fallback resolvers used when the main DNS server is "
+"unreachable, checked left to right. The special entry dhcp expands to the "
+"WAN resolvers from DHCP; 0 disables failover"
+msgstr ""
+"Резервные DNS-серверы через запятую, используются когда основной недоступен, "
+"проверяются слева направо. Спец-значение dhcp подставляет DNS провайдера из "
+"DHCP; 0 отключает failover"
+
+msgid "Yandex + provider (recommended)"
+msgstr "Яндекс + провайдер (рекомендуется)"
+
+msgid "Yandex"
+msgstr "Яндекс"
+
+msgid "Provider DNS (from DHCP)"
+msgstr "DNS провайдера (из DHCP)"
+
+msgid "Set a resolver chain or 0 to disable failover"
+msgstr "Укажите цепочку резолверов или 0, чтобы отключить failover"
+
+msgid "Invalid entry %s: %s"
+msgstr "Некорректный элемент %s: %s"
+
 msgid "Browser is not using FakeIP"
 msgstr "Браузер не использует FakeIP"
 
