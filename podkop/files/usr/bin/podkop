@@ -870,21 +870,44 @@ sing_box_configure_dns() {
         fakeip_inet6_range="$SB_FAKEIP_INET6_RANGE"
     fi
 
-    config=$(sing_box_cm_configure_dns "$config" "$SB_DNS_SERVER_TAG" "$dns_strategy" true)
-
     log "Adding DNS Servers" "debug"
     local dns_type dns_server bootstrap_dns_server dns_domain_resolver dns_server_address
+    local fallback_dns_server fallback_dns_server_address final_dns_server_tag
     config_get dns_type "settings" "dns_type" "doh"
     config_get dns_server "settings" "dns_server" "1.1.1.1"
     config_get bootstrap_dns_server "settings" "bootstrap_dns_server" "77.88.8.8"
+    config_get fallback_dns_server "settings" "fallback_dns_server" "$DEFAULT_FALLBACK_DNS"
 
     dns_server_address="$(url_get_host "$dns_server")"
     if ! is_ipv4 "$dns_server_address" && ! is_ipv6 "$dns_server_address"; then
         dns_domain_resolver=$SB_BOOTSTRAP_SERVER_TAG
     fi
 
+    # DNS failover: pick the final server by probing. The main server is probed
+    # by IP (a hostname main resolves through the bootstrap, never through
+    # dnsmasq/sing-box which may be down during this reload)
+    final_dns_server_tag="$SB_DNS_SERVER_TAG"
+    if [ -n "$fallback_dns_server" ] && [ "$fallback_dns_server" != "0" ]; then
+        local probe_target
+        probe_target="$(dns_probe_target_ip "$dns_server" "$bootstrap_dns_server")"
+        if [ -z "$probe_target" ] || ! dns_probe "$probe_target"; then
+            fallback_dns_server_address="$(fallback_chain_pick "$fallback_dns_server")"
+            if [ -n "$fallback_dns_server_address" ]; then
+                final_dns_server_tag="$SB_FALLBACK_DNS_SERVER_TAG"
+                log "DNS failover: main DNS '$dns_server' is not answering, using fallback '$fallback_dns_server_address'" "warn"
+            else
+                log "DNS failover: main DNS '$dns_server' is not answering and no fallback from '$fallback_dns_server' works" "error"
+            fi
+        fi
+    fi
+
+    config=$(sing_box_cm_configure_dns "$config" "$final_dns_server_tag" "$dns_strategy" true)
+
     config=$(sing_box_cm_add_udp_dns_server "$config" "$SB_BOOTSTRAP_SERVER_TAG" "$bootstrap_dns_server" 53)
     config=$(sing_box_cf_add_dns_server "$config" "$dns_type" "$SB_DNS_SERVER_TAG" "$dns_server" "$dns_domain_resolver")
+    if [ -n "$fallback_dns_server_address" ]; then
+        config=$(sing_box_cm_add_udp_dns_server "$config" "$SB_FALLBACK_DNS_SERVER_TAG" "$fallback_dns_server_address" 53)
+    fi
     config=$(sing_box_cm_add_fakeip_dns_server "$config" "$SB_FAKEIP_DNS_SERVER_TAG" "$SB_FAKEIP_INET4_RANGE" \
         "$fakeip_inet6_range")
 
@@ -2234,6 +2257,45 @@ get_status() {
     echo "{\"enabled\":$enabled,\"status\":\"$status\"}"
 }
 
+# Cron-friendly watchdog behind the DNS failover: probes the main resolver,
+# flips the applied mode (ok=fallback chain / ok=main) with hysteresis and
+# reloads podkop on transitions. Designed to run once a minute, silent on success
+podkop_dns_health() {
+    local dns_server bootstrap_dns_server fallback_dns_server
+    config_get dns_server "settings" "dns_server"
+    config_get bootstrap_dns_server "settings" "bootstrap_dns_server" "77.88.8.8"
+    config_get fallback_dns_server "settings" "fallback_dns_server" "$DEFAULT_FALLBACK_DNS"
+
+    [ -n "$fallback_dns_server" ] && [ "$fallback_dns_server" != "0" ] || exit 0
+    [ -n "$(pidof sing-box)" ] || exit 0
+
+    local probe_target alive=0
+    probe_target="$(dns_probe_target_ip "$dns_server" "$bootstrap_dns_server")"
+    if [ -n "$probe_target" ] && dns_probe "$probe_target"; then
+        alive=1
+    fi
+
+    local mode=ok counter=0
+    if [ -f "$DNS_HEALTH_STATE_FILE" ]; then
+        read -r mode counter < "$DNS_HEALTH_STATE_FILE" 2>/dev/null
+    fi
+
+    local new_mode new_counter action
+    set -- $(dns_health_evaluate "$mode" "$counter" "$alive" "$DNS_FAILOVER_THRESHOLD")
+    new_mode="$1" new_counter="$2" action="$3"
+
+    echo "$new_mode $new_counter" > "$DNS_HEALTH_STATE_FILE"
+
+    if [ "$action" = "reload" ]; then
+        if [ "$new_mode" = "fail" ]; then
+            log "dns-health: main DNS '$dns_server' is down for $DNS_FAILOVER_THRESHOLD checks, switching to fallback" "warn"
+        else
+            log "dns-health: main DNS '$dns_server' has recovered, switching back" "info"
+        fi
+        /usr/bin/podkop reload >/dev/null 2>&1
+    fi
+}
+
 check_dns_available() {
     local dns_type dns_server bootstrap_dns_server
     config_get dns_type "settings" "dns_type"
@@ -3038,6 +3100,7 @@ Available commands:
     get_system_info         Get system information in JSON format
     get_sing_box_features   Get the features of the installed sing-box in JSON format
     check_dns_available     Check DNS server availability
+    dns-health              DNS failover watchdog step (for cron, once a minute)
     global_check            Run global system check
     exclude_ip_add IP       Exclude a local IP from routing, applied without restart
     exclude_ip_del IP       Stop excluding a local IP, applied without restart
@@ -3119,6 +3182,9 @@ get_sing_box_features)
     ;;
 check_dns_available)
     check_dns_available
+    ;;
+dns-health)
+    podkop_dns_health
     ;;
 global_check)
     global_check "${2:-}"

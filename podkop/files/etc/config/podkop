@@ -2,6 +2,10 @@ config settings 'settings'
         option dns_type 'udp'
         option dns_server '77.88.8.8'
         option bootstrap_dns_server '77.88.8.8'
+        # Comma-separated failover chain behind the main DNS; "dhcp" = WAN
+        # nameservers, "0" = disabled. Health-checked on start/reload and by
+        # the "podkop dns-health" cron watchdog
+        option fallback_dns_server '77.88.8.8,dhcp'
         option dns_rewrite_ttl '60'
         list source_network_interfaces 'br-lan'
         option enable_output_network_interface '0'

@@ -430,3 +430,100 @@ parse_domain_or_subnet_file_to_comma_string() {
 
     echo "$result"
 }
+## DNS failover helpers (used by config generation and the dns-health watchdog)
+
+# Returns 0 when the given resolver answers a plain UDP A query, 1 otherwise
+dns_probe() {
+    local server="$1"
+
+    [ -n "$server" ] || return 1
+    dig +time="$DNS_PROBE_TIMEOUT" +tries=1 +short @"$server" "$DNS_PROBE_DOMAIN" A >/dev/null 2>&1 && return 0
+    return 1
+}
+
+# Prints the IPv4 nameservers received via DHCP (resolv.conf.auto), in file order
+get_dhcp_dns() {
+    awk '/^nameserver[ \t]/ && $2 ~ /^[0-9]+\.[0-9]+\./ {print $2}' "$RESOLV_CONF_AUTO" 2>/dev/null
+}
+
+# Prints the IP to probe for a possibly hostname-based DNS server: a literal
+# address as-is, a hostname resolved through the given bootstrap resolver
+# (never through dnsmasq/sing-box, which may be down during a reload)
+dns_probe_target_ip() {
+    local server="$1" bootstrap="$2" address
+
+    address="$(url_get_host "$server")"
+    if is_ipv4 "$address" || is_ipv6 "$address"; then
+        echo "$address"
+        return 0
+    fi
+    [ -n "$bootstrap" ] || return 1
+    local answer
+    answer=$(dig +short +time="$DNS_PROBE_TIMEOUT" +tries=1 @"$bootstrap" "$address" A 2>/dev/null | sed -n '/^[0-9]\+\.[0-9]\+\.[0-9]\+\.[0-9]\+$/p' | head -n1)
+    [ -n "$answer" ] || return 1
+    echo "$answer"
+}
+
+# Walks the fallback chain and prints the first resolver that answers
+fallback_chain_pick() {
+    local chain="$1" entry server
+
+    [ -n "$chain" ] || return 1
+    for entry in $(echo "$chain" | tr ',' ' '); do
+        [ -n "$entry" ] || continue
+        if [ "$entry" = "dhcp" ]; then
+            for server in $(get_dhcp_dns); do
+                if dns_probe "$server"; then
+                    echo "$server"
+                    return 0
+                fi
+            done
+        else
+            if dns_probe "$entry"; then
+                echo "$entry"
+                return 0
+            fi
+        fi
+    done
+    return 1
+}
+
+# One step of the dns-health state machine. Arguments: mode(ok|fail) as
+# currently applied in the config, counter of contradicting observations,
+# alive(1|0) for the main resolver, flip threshold. Prints "mode counter action"
+# where action is "reload" when the mode flipped, otherwise "none"
+dns_health_evaluate() {
+    local mode="$1" counter="$2" alive="$3" threshold="$4"
+
+    case "$mode" in
+    ok|fail) ;;
+    *) mode="ok"; counter=0 ;;
+    esac
+    case "$counter" in
+    ''|*[!0-9]*) counter=0 ;;
+    esac
+
+    if [ "$mode" = "ok" ]; then
+        if [ "$alive" = "1" ]; then
+            echo "ok 0 none"
+        else
+            counter=$((counter + 1))
+            if [ "$counter" -ge "$threshold" ]; then
+                echo "fail 0 reload"
+            else
+                echo "ok $counter none"
+            fi
+        fi
+    else
+        if [ "$alive" = "0" ]; then
+            echo "fail 0 none"
+        else
+            counter=$((counter + 1))
+            if [ "$counter" -ge "$threshold" ]; then
+                echo "ok 0 reload"
+            else
+                echo "fail $counter none"
+            fi
+        fi
+    fi
+}

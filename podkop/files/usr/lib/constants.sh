@@ -4,7 +4,8 @@ PODKOP_VERSION="__COMPILED_VERSION_VARIABLE__"
 ## Common
 PODKOP_CONFIG="/etc/config/podkop"
 RESOLV_CONF="/etc/resolv.conf"
-DNS_RESOLVERS="1.1.1.1 1.0.0.1 8.8.8.8 8.8.4.4 9.9.9.9 9.9.9.11 94.140.14.14 94.140.15.15 208.67.220.220 208.67.222.222 77.88.8.1 77.88.8.8"
+RESOLV_CONF_AUTO="/tmp/resolv.conf.d/resolv.conf.auto"
+DNS_RESOLVERS="1.1.1.1 1.0.0.1 8.8.8.8 8.8.4.4 9.9.9.9 9.9.9.11 94.140.14.14 94.140.15.15 94.140.14.140 94.140.15.140 208.67.220.220 208.67.222.222 77.88.8.1 77.88.8.8"
 CHECK_PROXY_IP_DOMAIN="ip.podkop.fyi"
 FAKEIP_TEST_DOMAIN="fakeip.podkop.fyi"
 TMP_SING_BOX_FOLDER="/tmp/sing-box"
@@ -13,6 +14,15 @@ CLOUDFLARE_OCTETS="8.47 162.159 188.114" # Endpoints https://github.com/ampeteli
 JQ_REQUIRED_VERSION="1.7.1"
 COREUTILS_BASE64_REQUIRED_VERSION="9.7"
 RT_TABLE_NAME="podkop"
+
+## DNS failover (fallback chain + dns-health watchdog)
+# Comma-separated chain of fallback resolvers; the special entry "dhcp" expands
+# to the IPv4 nameservers received on the WAN (resolv.conf.auto). "0" disables.
+DEFAULT_FALLBACK_DNS="77.88.8.8,dhcp"
+DNS_PROBE_DOMAIN="ya.ru"
+DNS_PROBE_TIMEOUT=2
+DNS_FAILOVER_THRESHOLD=3
+DNS_HEALTH_STATE_FILE="/tmp/podkop_dns_health"
 
 ## nft
 NFT_TABLE_NAME="PodkopTable"
@@ -34,6 +44,7 @@ SB_FAKEIP_DNS_SERVER_TAG="fakeip-server"
 SB_FAKEIP_INET4_RANGE="198.18.0.0/15"
 SB_FAKEIP_INET6_RANGE="fc00::/18"
 SB_BOOTSTRAP_SERVER_TAG="bootstrap-dns-server"
+SB_FALLBACK_DNS_SERVER_TAG="fallback-dns-server"
 SB_FAKEIP_DNS_RULE_TAG="fakeip-dns-rule-tag"
 SB_FAKEIP_SERVICE_DNS_RULE_TAG="fakeip-service-dns-rule-tag"
 SB_INVERT_FAKEIP_DNS_RULE_TAG="invert-fakeip-dns-rule-tag"
